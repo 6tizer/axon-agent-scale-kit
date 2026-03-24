@@ -22,7 +22,7 @@ def load_yaml(path: str) -> dict:
 def load_state(path: str) -> dict:
     state_path = Path(path)
     if not state_path.exists():
-        return {"requests": {}, "agents": {}, "events": []}
+        return {"requests": {}, "agents": {}, "events": [], "settings": {}}
     state = json.loads(state_path.read_text(encoding="utf-8"))
     if "requests" not in state:
         state["requests"] = {}
@@ -30,6 +30,8 @@ def load_state(path: str) -> dict:
         state["agents"] = {}
     if "events" not in state:
         state["events"] = []
+    if "settings" not in state:
+        state["settings"] = {}
     return state
 
 
@@ -70,6 +72,32 @@ def network_and_agent_checks(network_cfg: dict, agents_cfg: dict) -> list[str]:
         if not item.get("wallet_ref"):
             errors.append(f"agents[{idx}].wallet_ref is required")
     return errors
+
+
+def is_valid_evm_address(address: str) -> bool:
+    return bool(re.fullmatch(r"0x[a-fA-F0-9]{40}", address or ""))
+
+
+def funding_wallet_set(state_file: str, address: str) -> int:
+    if not is_valid_evm_address(address):
+        print(json.dumps({"ok": False, "error": "invalid funding address format"}, ensure_ascii=False, indent=2))
+        return 1
+    state = load_state(state_file)
+    state["settings"]["funding_address"] = address
+    state["events"].append({"ts": now_ts(), "type": "funding_wallet_set", "address": address})
+    save_state(state_file, state)
+    print(json.dumps({"ok": True, "funding_address": address}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def funding_wallet_get(state_file: str) -> int:
+    state = load_state(state_file)
+    address = state.get("settings", {}).get("funding_address")
+    if not address:
+        print(json.dumps({"ok": False, "error": "funding wallet not initialized"}, ensure_ascii=False, indent=2))
+        return 1
+    print(json.dumps({"ok": True, "funding_address": address}, ensure_ascii=False, indent=2))
+    return 0
 
 
 def validate(network: str, agents: str, strict_rpc: bool) -> int:
@@ -116,6 +144,8 @@ def create_request(
         errors.append("min_confirmations must be >= 1")
     if timeout_sec < 1:
         errors.append("timeout_sec must be >= 1")
+    if not is_valid_evm_address(funding_address):
+        errors.append("funding_address must be a valid EVM address")
     if errors:
         print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
         return 1
@@ -421,7 +451,7 @@ def run_intent_pipeline(
     network: str,
     agents: str,
     intent: str,
-    funding_address: str,
+    funding_address: str | None,
     observed_confirmations: int,
     observed_chain_id: int,
     strict_rpc: bool,
@@ -432,11 +462,25 @@ def run_intent_pipeline(
     if not parsed["ok"]:
         print(json.dumps(parsed, ensure_ascii=False, indent=2))
         return 1
+    resolved_funding_address = funding_address or load_state(state_file).get("settings", {}).get("funding_address")
+    if not resolved_funding_address:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "funding wallet not initialized",
+                    "next_step": "run: axonctl funding-wallet-set --address <0x...40hex...>",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 1
     create_code = create_request(
         state_file=state_file,
         target_agents=parsed["target_agents"],
         min_funding_axon=parsed["amount_axon"],
-        funding_address=funding_address,
+        funding_address=resolved_funding_address,
         min_confirmations=2,
         timeout_sec=1800,
         stake_per_agent_axon=100.0,
@@ -469,6 +513,13 @@ def run_intent_pipeline(
 def main() -> int:
     parser = argparse.ArgumentParser(prog="axonctl")
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_wallet_set = sub.add_parser("funding-wallet-set")
+    p_wallet_set.add_argument("--state-file", default="state/deploy_state.json")
+    p_wallet_set.add_argument("--address", required=True)
+
+    p_wallet_get = sub.add_parser("funding-wallet-get")
+    p_wallet_get.add_argument("--state-file", default="state/deploy_state.json")
 
     p_validate = sub.add_parser("validate")
     p_validate.add_argument("--network", required=True)
@@ -519,13 +570,17 @@ def main() -> int:
     p_intent.add_argument("--network", required=True)
     p_intent.add_argument("--agents", required=True)
     p_intent.add_argument("--intent", required=True)
-    p_intent.add_argument("--funding-address", default="0xFUNDINGADDRESS")
+    p_intent.add_argument("--funding-address")
     p_intent.add_argument("--observed-confirmations", type=int, default=3)
     p_intent.add_argument("--observed-chain-id", type=int, default=8210)
     p_intent.add_argument("--strict-rpc", action="store_true")
 
     args = parser.parse_args()
 
+    if args.cmd == "funding-wallet-set":
+        return funding_wallet_set(args.state_file, args.address)
+    if args.cmd == "funding-wallet-get":
+        return funding_wallet_get(args.state_file)
     if args.cmd == "validate":
         return validate(args.network, args.agents, args.strict_rpc)
     if args.cmd == "request-create":

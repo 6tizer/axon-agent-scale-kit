@@ -45,6 +45,7 @@ class AxonCtlRegressionTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        self.valid_address = "0x1111111111111111111111111111111111111111"
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -59,7 +60,7 @@ class AxonCtlRegressionTests(unittest.TestCase):
             state_file=str(self.state_file),
             target_agents=2,
             min_funding_axon=150.0,
-            funding_address="0xabc",
+            funding_address=self.valid_address,
             min_confirmations=2,
             timeout_sec=600,
             stake_per_agent_axon=100.0,
@@ -73,7 +74,7 @@ class AxonCtlRegressionTests(unittest.TestCase):
                 state_file=str(self.state_file),
                 target_agents=2,
                 min_funding_axon=250.0,
-                funding_address="0xabc",
+                funding_address=self.valid_address,
                 min_confirmations=2,
                 timeout_sec=600,
                 stake_per_agent_axon=100.0,
@@ -115,12 +116,13 @@ class AxonCtlRegressionTests(unittest.TestCase):
 
     @mock.patch("axonctl.rpc_chain_id", return_value=(True, 8210, None))
     def test_run_intent_pipeline_success(self, _rpc_mock: mock.Mock) -> None:
+        self.assertEqual(axonctl.funding_wallet_set(str(self.state_file), self.valid_address), 0)
         code = axonctl.run_intent_pipeline(
             state_file=str(self.state_file),
             network=str(self.network_file),
             agents=str(self.agents_file),
             intent="我打250 AXON，扩容2个Agents",
-            funding_address="0xabc",
+            funding_address=None,
             observed_confirmations=3,
             observed_chain_id=8210,
             strict_rpc=True,
@@ -131,13 +133,32 @@ class AxonCtlRegressionTests(unittest.TestCase):
         self.assertEqual(req["target_agents"], 2)
         self.assertIn(req["status"], {"SCALED", "SUCCESS"})
 
+    @mock.patch("axonctl.rpc_chain_id", return_value=(True, 8210, None))
+    def test_run_intent_pipeline_requires_initialized_funding_wallet(self, _rpc_mock: mock.Mock) -> None:
+        code = axonctl.run_intent_pipeline(
+            state_file=str(self.state_file),
+            network=str(self.network_file),
+            agents=str(self.agents_file),
+            intent="我打250 AXON，扩容2个Agents",
+            funding_address=None,
+            observed_confirmations=3,
+            observed_chain_id=8210,
+            strict_rpc=True,
+        )
+        self.assertEqual(code, 1)
+
+    def test_funding_wallet_set_and_get(self) -> None:
+        self.assertEqual(axonctl.funding_wallet_set(str(self.state_file), self.valid_address), 0)
+        self.assertEqual(axonctl.funding_wallet_get(str(self.state_file)), 0)
+
     def test_run_intent_pipeline_rejects_invalid_sentence(self) -> None:
+        self.assertEqual(axonctl.funding_wallet_set(str(self.state_file), self.valid_address), 0)
         code = axonctl.run_intent_pipeline(
             state_file=str(self.state_file),
             network=str(self.network_file),
             agents=str(self.agents_file),
             intent="请帮我处理一下",
-            funding_address="0xabc",
+            funding_address=None,
             observed_confirmations=3,
             observed_chain_id=8210,
             strict_rpc=False,

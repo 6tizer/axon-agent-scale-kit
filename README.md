@@ -16,6 +16,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python scripts/axonctl.py validate --network configs/network.yaml --agents configs/agents.yaml
+python scripts/axonctl.py funding-wallet-set --address 0x1111111111111111111111111111111111111111
+python scripts/axonctl.py funding-wallet-get
 python scripts/axonctl.py run-intent \
   --network configs/network.yaml \
   --agents configs/agents.yaml \
