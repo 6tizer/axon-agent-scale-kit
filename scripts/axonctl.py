@@ -100,6 +100,69 @@ def funding_wallet_get(state_file: str) -> int:
     return 0
 
 
+def wallet_generate(state_file: str, role: str, label: str) -> int:
+    state = load_state(state_file)
+    if "wallets" not in state:
+        state["wallets"] = {}
+    try:
+        from eth_account import Account
+        Account.enable_unaudited_hdwallet_features()
+        acct, mnemonic = Account.create_with_mnemonic()
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": f"wallet generation failed: {e}"}, ensure_ascii=False, indent=2))
+        return 1
+    address = acct.address
+    privkey = acct.key.hex()
+    key_id = str(uuid.uuid4())[:8]
+    state["wallets"][key_id] = {
+        "address": address,
+        "private_key": privkey,
+        "role": role,
+        "label": label,
+        "mnemonic": mnemonic,
+        "created_at": now_ts(),
+    }
+    state["events"].append({"ts": now_ts(), "type": "wallet_generated", "role": role, "label": label, "key_id": key_id})
+    save_state(state_file, state)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "key_id": key_id,
+                "address": address,
+                "private_key": privkey,
+                "mnemonic": mnemonic,
+                "warning": "BACKUP NOW: private key and mnemonic are shown only once and cannot be recovered",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def wallet_list(state_file: str) -> int:
+    state = load_state(state_file)
+    wallets = state.get("wallets", {})
+    if not wallets:
+        print(json.dumps({"ok": True, "wallets": [], "count": 0}, ensure_ascii=False, indent=2))
+        return 0
+    items = []
+    for key_id, w in wallets.items():
+        items.append(
+            {
+                "key_id": key_id,
+                "address": w["address"],
+                "role": w.get("role", ""),
+                "label": w.get("label", ""),
+                "created_at": w.get("created_at"),
+            }
+        )
+    items.sort(key=lambda x: x.get("created_at", 0))
+    print(json.dumps({"ok": True, "wallets": items, "count": len(items)}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def validate(network: str, agents: str, strict_rpc: bool) -> int:
     network_cfg = load_yaml(network)
     agents_cfg = load_yaml(agents)
@@ -272,6 +335,35 @@ def build_scale_plan(state_file: str, network: str, agents: str, request_id: str
     return 0
 
 
+def _ensure_agent_wallet(state_file: str, agent_name: str, request_id: str) -> dict:
+    state = load_state(state_file)
+    if "wallets" not in state:
+        state["wallets"] = {}
+    for key_id, w in state["wallets"].items():
+        if w.get("label") == f"agent:{agent_name}" and w.get("role") == "agent":
+            return {"key_id": key_id, "address": w["address"], "private_key": w["private_key"]}
+    try:
+        from eth_account import Account
+        Account.enable_unaudited_hdwallet_features()
+        acct, mnemonic = Account.create_with_mnemonic()
+    except Exception:
+        return {"key_id": None, "address": None, "private_key": None}
+    key_id = str(uuid.uuid4())[:8]
+    state["wallets"][key_id] = {
+        "address": acct.address,
+        "private_key": acct.key.hex(),
+        "role": "agent",
+        "label": f"agent:{agent_name}",
+        "mnemonic": mnemonic,
+        "created_at": now_ts(),
+    }
+    state["events"].append(
+        {"ts": now_ts(), "type": "wallet_generated", "role": "agent", "label": f"agent:{agent_name}", "key_id": key_id}
+    )
+    save_state(state_file, state)
+    return {"key_id": key_id, "address": acct.address, "private_key": acct.key.hex()}
+
+
 def execute_scale(
     state_file: str,
     network: str,
@@ -296,9 +388,13 @@ def execute_scale(
     completed = set(req["execution"].get("completed_agents", []))
     failed = dict(req["execution"].get("failed_agents", {}))
     attempts = dict(req["execution"].get("attempts", {}))
+    generated_keys = []
     for name in target_names:
         if name in completed:
             continue
+        wallet_info = _ensure_agent_wallet(state_file, name, request_id)
+        if wallet_info["address"]:
+            generated_keys.append({"agent": name, "key_id": wallet_info["key_id"], "address": wallet_info["address"]})
         last_error = None
         for _ in range(retry_times + 1):
             attempts[name] = int(attempts.get(name, 0)) + 1
@@ -312,6 +408,7 @@ def execute_scale(
                 "service_active": True,
                 "heartbeat_at": now_ts(),
                 "last_error": "",
+                "wallet_address": wallet_info["address"] or "",
             }
             completed.add(name)
             if name in failed:
@@ -330,21 +427,21 @@ def execute_scale(
     else:
         req["status"] = "SCALED"
     req["updated_at"] = now_ts()
-    state["events"].append({"ts": now_ts(), "type": "scale_executed", "request_id": request_id, "status": req["status"]})
-    save_state(state_file, state)
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "request_id": request_id,
-                "status": req["status"],
-                "completed": sorted(completed),
-                "failed": failed,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
+    state["events"].append(
+        {"ts": now_ts(), "type": "scale_executed", "request_id": request_id, "status": req["status"], "wallets_generated": generated_keys}
     )
+    save_state(state_file, state)
+    out = {
+        "ok": True,
+        "request_id": request_id,
+        "status": req["status"],
+        "completed": sorted(completed),
+        "failed": failed,
+    }
+    if generated_keys:
+        out["wallets_generated"] = generated_keys
+        out["wallet_warning"] = "BACKUP: agent private keys are stored in state file. Export with: axonctl wallet-export --key-id <key_id>"
+    print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -375,6 +472,7 @@ def status(state_file: str, request_id: str) -> int:
                 "chain_staked": bool(item.get("staked")),
                 "service_active": bool(item.get("service_active")),
                 "heartbeat_at": item.get("heartbeat_at"),
+                "wallet_address": item.get("wallet_address", ""),
                 "status": status_value,
                 "last_error": item.get("last_error", ""),
             }
@@ -435,6 +533,31 @@ def repair(state_file: str, request_id: str) -> int:
     state["events"].append({"ts": now_ts(), "type": "repair_run", "request_id": request_id, "repaired": repaired})
     save_state(state_file, state)
     print(json.dumps({"ok": True, "request_id": request_id, "repaired": repaired, "skipped": skipped, "status": req["status"]}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def wallet_export(state_file: str, key_id: str) -> int:
+    state = load_state(state_file)
+    wallets = state.get("wallets", {})
+    w = wallets.get(key_id)
+    if not w:
+        print(json.dumps({"ok": False, "error": "wallet not found"}, ensure_ascii=False, indent=2))
+        return 1
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "key_id": key_id,
+                "address": w["address"],
+                "private_key": w["private_key"],
+                "role": w.get("role"),
+                "label": w.get("label"),
+                "warning": "PROTECT THIS: private key grants full control of the wallet",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -521,6 +644,18 @@ def main() -> int:
     p_wallet_get = sub.add_parser("funding-wallet-get")
     p_wallet_get.add_argument("--state-file", default="state/deploy_state.json")
 
+    p_wallet_gen = sub.add_parser("wallet-generate")
+    p_wallet_gen.add_argument("--state-file", default="state/deploy_state.json")
+    p_wallet_gen.add_argument("--role", required=True, choices=["funding", "agent"])
+    p_wallet_gen.add_argument("--label", required=True)
+
+    p_wallet_list = sub.add_parser("wallet-list")
+    p_wallet_list.add_argument("--state-file", default="state/deploy_state.json")
+
+    p_wallet_export = sub.add_parser("wallet-export")
+    p_wallet_export.add_argument("--state-file", default="state/deploy_state.json")
+    p_wallet_export.add_argument("--key-id", required=True)
+
     p_validate = sub.add_parser("validate")
     p_validate.add_argument("--network", required=True)
     p_validate.add_argument("--agents", required=True)
@@ -581,6 +716,12 @@ def main() -> int:
         return funding_wallet_set(args.state_file, args.address)
     if args.cmd == "funding-wallet-get":
         return funding_wallet_get(args.state_file)
+    if args.cmd == "wallet-generate":
+        return wallet_generate(args.state_file, args.role, args.label)
+    if args.cmd == "wallet-list":
+        return wallet_list(args.state_file)
+    if args.cmd == "wallet-export":
+        return wallet_export(args.state_file, args.key_id)
     if args.cmd == "validate":
         return validate(args.network, args.agents, args.strict_rpc)
     if args.cmd == "request-create":

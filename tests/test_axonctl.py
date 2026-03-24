@@ -8,7 +8,7 @@ import yaml
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "scripts"))
-import axonctl  # noqa: E402
+import axonctl
 
 
 class AxonCtlRegressionTests(unittest.TestCase):
@@ -68,7 +68,8 @@ class AxonCtlRegressionTests(unittest.TestCase):
         self.assertEqual(code, 1)
 
     @mock.patch("axonctl.rpc_chain_id", return_value=(True, 8210, None))
-    def test_funded_plan_scale_repair_status_flow(self, _rpc_mock: mock.Mock) -> None:
+    @mock.patch("axonctl._ensure_agent_wallet", return_value={"key_id": "testkey", "address": "0x2222222222222222222222222222222222222222", "private_key": "0x" + "a" * 64})
+    def test_funded_plan_scale_repair_status_flow(self, _wallet_mock: mock.Mock, _rpc_mock: mock.Mock) -> None:
         self.assertEqual(
             axonctl.create_request(
                 state_file=str(self.state_file),
@@ -115,7 +116,8 @@ class AxonCtlRegressionTests(unittest.TestCase):
         self.assertEqual(final_state["requests"][request_id]["status"], "SCALED")
 
     @mock.patch("axonctl.rpc_chain_id", return_value=(True, 8210, None))
-    def test_run_intent_pipeline_success(self, _rpc_mock: mock.Mock) -> None:
+    @mock.patch("axonctl._ensure_agent_wallet", return_value={"key_id": "testkey", "address": "0x2222222222222222222222222222222222222222", "private_key": "0x" + "a" * 64})
+    def test_run_intent_pipeline_success(self, _wallet_mock: mock.Mock, _rpc_mock: mock.Mock) -> None:
         self.assertEqual(axonctl.funding_wallet_set(str(self.state_file), self.valid_address), 0)
         code = axonctl.run_intent_pipeline(
             state_file=str(self.state_file),
@@ -150,6 +152,24 @@ class AxonCtlRegressionTests(unittest.TestCase):
     def test_funding_wallet_set_and_get(self) -> None:
         self.assertEqual(axonctl.funding_wallet_set(str(self.state_file), self.valid_address), 0)
         self.assertEqual(axonctl.funding_wallet_get(str(self.state_file)), 0)
+
+    def test_wallet_generate_and_list_and_export(self) -> None:
+        code = axonctl.wallet_generate(str(self.state_file), role="funding", label="test-funding-wallet")
+        self.assertEqual(code, 0)
+        code = axonctl.wallet_list(str(self.state_file))
+        self.assertEqual(code, 0)
+        state = axonctl.load_state(str(self.state_file))
+        key_id = next(iter(state["wallets"]))
+        code = axonctl.wallet_export(str(self.state_file), key_id)
+        self.assertEqual(code, 0)
+
+    def test_wallet_export_not_found(self) -> None:
+        code = axonctl.wallet_export(str(self.state_file), "nonexistent")
+        self.assertEqual(code, 1)
+
+    def test_funding_wallet_get_rejects_when_not_set(self) -> None:
+        code = axonctl.funding_wallet_get(str(self.state_file))
+        self.assertEqual(code, 1)
 
     def test_run_intent_pipeline_rejects_invalid_sentence(self) -> None:
         self.assertEqual(axonctl.funding_wallet_set(str(self.state_file), self.valid_address), 0)
