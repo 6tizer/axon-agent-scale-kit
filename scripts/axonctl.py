@@ -387,14 +387,30 @@ def heartbeat_once(state_file: str, network: str, agent: str, max_retries: int |
         with request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         current_block = int(data["result"], 16)
-    except Exception:
+    except Exception as e:
         current_block = None
+        if isinstance(state.get("agents", {}).get(agent, {}).get("last_heartbeat_block"), int):
+            state.setdefault("agents", {}).setdefault(agent, {})
+            state["agents"][agent]["last_error"] = ""
+            save_state(state_file, state)
+            result = {
+                "ok": True,
+                "agent": agent,
+                "status": "skipped",
+                "reason": "rpc_unavailable",
+                "error": str(e),
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
     agent_item = state.get("agents", {}).get(agent, {})
     last_block = agent_item.get("last_heartbeat_block")
     if isinstance(current_block, int) and isinstance(last_block, int):
         elapsed = current_block - last_block
         due_blocks = max(int(hb_cfg["interval_blocks"]), int(hb_cfg["timeout_blocks"]) - int(hb_cfg["prewarn_blocks"]))
         if elapsed < due_blocks:
+            state.setdefault("agents", {}).setdefault(agent, {})
+            state["agents"][agent]["last_error"] = ""
+            save_state(state_file, state)
             result = {
                 "ok": True,
                 "agent": agent,
@@ -467,6 +483,7 @@ def heartbeat_batch(state_file: str, network: str, request_id: str | None, max_r
     skipped = []
     failed = []
     for name in targets:
+        before_tx = load_state(state_file).get("agents", {}).get(name, {}).get("last_heartbeat_tx")
         code = heartbeat_once(
             state_file=state_file,
             network=network,
@@ -476,7 +493,8 @@ def heartbeat_batch(state_file: str, network: str, request_id: str | None, max_r
             receipt_timeout_sec=receipt_timeout_sec,
         )
         current = load_state(state_file).get("agents", {}).get(name, {})
-        if code == 0 and current.get("last_heartbeat_tx"):
+        after_tx = current.get("last_heartbeat_tx")
+        if code == 0 and after_tx and after_tx != before_tx:
             sent.append(name)
         elif code == 0:
             skipped.append(name)
@@ -501,6 +519,42 @@ def heartbeat_batch(state_file: str, network: str, request_id: str | None, max_r
         )
     )
     return 0 if ok else 1
+
+
+def heartbeat_daemon(
+    state_file: str,
+    network: str,
+    request_id: str | None,
+    interval_sec: int,
+    max_retries: int | None,
+    backoff_seconds: int | None,
+    receipt_timeout_sec: int | None,
+    max_cycles: int,
+) -> int:
+    if interval_sec < 1:
+        print(json.dumps({"ok": False, "error": "interval_sec must be >= 1"}, ensure_ascii=False, indent=2))
+        return 1
+    if max_cycles < 0:
+        print(json.dumps({"ok": False, "error": "max_cycles must be >= 0"}, ensure_ascii=False, indent=2))
+        return 1
+    cycle = 0
+    print(json.dumps({"ok": True, "status": "daemon_started", "interval_sec": interval_sec, "request_id": request_id, "max_cycles": max_cycles}, ensure_ascii=False, indent=2))
+    while True:
+        cycle += 1
+        code = heartbeat_batch(
+            state_file=state_file,
+            network=network,
+            request_id=request_id,
+            max_retries=max_retries,
+            backoff_seconds=backoff_seconds,
+            receipt_timeout_sec=receipt_timeout_sec,
+        )
+        print(json.dumps({"ok": code == 0, "status": "cycle_done", "cycle": cycle, "ts": now_ts()}, ensure_ascii=False, indent=2))
+        if max_cycles > 0 and cycle >= max_cycles:
+            break
+        time.sleep(interval_sec)
+    print(json.dumps({"ok": True, "status": "daemon_stopped", "cycles": cycle}, ensure_ascii=False, indent=2))
+    return 0
 
 
 def challenge_gate_check(state_file: str, network: str, agent: str) -> int:
@@ -1828,6 +1882,16 @@ def main() -> int:
     p_heartbeat_batch.add_argument("--backoff-seconds", type=int)
     p_heartbeat_batch.add_argument("--receipt-timeout-sec", type=int)
 
+    p_heartbeat_daemon = sub.add_parser("heartbeat-daemon")
+    p_heartbeat_daemon.add_argument("--state-file", default="state/deploy_state.json")
+    p_heartbeat_daemon.add_argument("--network", required=True)
+    p_heartbeat_daemon.add_argument("--request-id")
+    p_heartbeat_daemon.add_argument("--interval-sec", type=int, default=180)
+    p_heartbeat_daemon.add_argument("--max-retries", type=int)
+    p_heartbeat_daemon.add_argument("--backoff-seconds", type=int)
+    p_heartbeat_daemon.add_argument("--receipt-timeout-sec", type=int)
+    p_heartbeat_daemon.add_argument("--max-cycles", type=int, default=0)
+
     p_challenge_gate = sub.add_parser("challenge-gate-check")
     p_challenge_gate.add_argument("--state-file", default="state/deploy_state.json")
     p_challenge_gate.add_argument("--network", required=True)
@@ -1915,6 +1979,17 @@ def main() -> int:
         return heartbeat_once(args.state_file, args.network, args.agent, args.max_retries, args.backoff_seconds, args.receipt_timeout_sec)
     if args.cmd == "heartbeat-batch":
         return heartbeat_batch(args.state_file, args.network, args.request_id, args.max_retries, args.backoff_seconds, args.receipt_timeout_sec)
+    if args.cmd == "heartbeat-daemon":
+        return heartbeat_daemon(
+            args.state_file,
+            args.network,
+            args.request_id,
+            args.interval_sec,
+            args.max_retries,
+            args.backoff_seconds,
+            args.receipt_timeout_sec,
+            args.max_cycles,
+        )
     if args.cmd == "challenge-gate-check":
         return challenge_gate_check(args.state_file, args.network, args.agent)
     if args.cmd == "challenge-run-once":
