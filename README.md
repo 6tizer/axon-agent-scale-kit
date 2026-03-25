@@ -1,6 +1,42 @@
 # AXON Agent Scale Kit
 
-Automation toolkit for AXON agent daily scaling workflows.
+Scale, operate, and secure AXON Agents with one CLI-first workflow.
+
+Production-oriented automation for funded scaling, remote deployment, heartbeat, AI challenge execution, lifecycle repair, and wallet governance.
+
+## Capabilities
+
+- Config validation for network, agents, and operational guardrails
+- Funding-gated scaling pipeline with request, plan, execute, status, and repair stages
+- Remote server deployment with 1-agent-1-container orchestration
+- Heartbeat automation with retry/backoff and due-window checks
+- AI challenge flow with gate checks, local answer bank, and batch execution
+- Lifecycle reporting with health grading and repair actions
+- Wallet governance with masked export, secure backup export, and backup verification
+
+## 10-Line Quick Start
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/axonctl.py init-step --mode local
+python scripts/axonctl.py wallet-generate --role funding --label "my-funding"
+python scripts/axonctl.py validate --network configs/network.yaml --agents configs/agents.yaml
+python scripts/axonctl.py run-intent --network configs/network.yaml --agents configs/agents.yaml --intent "I fund 250 AXON, scale 2 agents"
+python scripts/axonctl.py remote-deploy --state-file state/deploy_state.json --request-id <request_id> --hosts configs/hosts.yaml --host your-server --network configs/network.yaml --agents configs/agents.yaml
+python scripts/axonctl.py heartbeat-batch --network configs/network.yaml --request-id <request_id>
+python scripts/axonctl.py challenge-batch --network configs/network.yaml --request-id <request_id>
+python scripts/axonctl.py lifecycle-report --network configs/network.yaml --request-id <request_id>
+```
+
+## Agent Invocation Rules
+
+- Always run `validate` before any state-changing action
+- Prefer deterministic, non-interactive commands with explicit flags
+- Run `challenge-gate-check` before `challenge-run-once` or `challenge-batch`
+- Treat non-open challenge windows and inactive validator gates as runtime conditions, not code failures
+- Use masked output by default; use `--reveal-secret` only in a secure environment
+- Finish every run with `wallet-backup-export` and `wallet-backup-verify`
 
 ## Scope
 
