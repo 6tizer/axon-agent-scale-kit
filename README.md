@@ -74,7 +74,7 @@ python scripts/axonctl.py validate \
 python scripts/axonctl.py run-intent \
   --network configs/network.yaml \
   --agents configs/agents.yaml \
-  --intent "我打250 AXON，扩容2个Agents"
+  --intent "I fund 250 AXON, scale 2 agents"
 
 # 4. deploy to remote server and start 1-agent-1-container
 python scripts/axonctl.py remote-deploy \

@@ -768,7 +768,7 @@ def wallet_export(state_file: str, key_id: str) -> int:
 
 def parse_intent(intent: str) -> dict:
     amount_match = re.search(r"(\d+(?:\.\d+)?)\s*AXON", intent, flags=re.IGNORECASE)
-    target_match = re.search(r"扩容\s*(\d+)\s*个?\s*agents?", intent, flags=re.IGNORECASE)
+    target_match = re.search(r"(?:scale|expand)\s*(\d+)\s*agents?", intent, flags=re.IGNORECASE)
     if not amount_match or not target_match:
         return {"ok": False, "error": "intent parse failed"}
     return {"ok": True, "amount_axon": float(amount_match.group(1)), "target_agents": int(target_match.group(1))}

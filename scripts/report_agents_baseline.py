@@ -79,7 +79,7 @@ def main() -> int:
                 "online_onchain": online_onchain,
                 "last_heartbeat_block_onchain": None,
                 "heartbeat_at_local": item.get("heartbeat_at"),
-                "note": "last_heartbeat_block 需 Cosmos x/agent 数据；当前 EVM 接口不可直接返回",
+                "note": "last_heartbeat_block requires Cosmos x/agent data and is not directly available from current EVM queries",
                 "error": error,
             }
         )

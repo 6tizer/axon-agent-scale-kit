@@ -163,7 +163,7 @@ class AxonCtlRegressionTests(unittest.TestCase):
             state_file=str(self.state_file),
             network=str(self.network_file),
             agents=str(self.agents_file),
-            intent="我打250 AXON，扩容2个Agents",
+            intent="I fund 250 AXON, scale 2 agents",
             funding_address=None,
             observed_confirmations=3,
             observed_chain_id=8210,
