@@ -13,6 +13,7 @@ Production-oriented automation for funded scaling, remote deployment, heartbeat,
 - AI challenge flow with gate checks, local answer bank, and batch execution
 - Lifecycle reporting with health grading and repair actions
 - Wallet governance with masked export, secure backup export, and backup verification
+- Built-in GitHub Actions unittest workflow for regression checks
 
 ## 10-Line Quick Start
 
@@ -61,6 +62,23 @@ python scripts/axonctl.py init-step --mode local
 # server dependency check/install (docker + directories)
 python scripts/axonctl.py init-step --mode server --hosts configs/hosts.yaml --host your-server
 ```
+
+## One-Command Release (Push -> Deploy -> Restart -> Verify)
+
+```bash
+# dry-run rehearsal (no mutation)
+scripts/release_deploy_verify.sh --dry-run --allow-dirty --skip-tests
+
+# real release
+scripts/release_deploy_verify.sh
+```
+
+The release script will:
+- run local regression (`python3 -m unittest tests.test_axonctl -q`, unless `--skip-tests`)
+- push `HEAD` to `origin/main`
+- deploy tracked files to server workdir via `git archive`
+- restart `axon-heartbeat-daemon.service`
+- verify service status, docker status, and lifecycle report
 
 ## Wallet Management
 
@@ -184,6 +202,25 @@ hosts:
     docker:
       expected_engine: "docker"
       expected_compose: "docker compose"
+```
+
+## Runtime Private Config Layer
+
+Use `configs/runtime/*.template.yaml` as source templates, then copy to private
+runtime files (ignored by git):
+
+```bash
+cp configs/runtime/network.runtime.template.yaml configs/runtime/network.runtime.yaml
+cp configs/runtime/agents.runtime.template.yaml configs/runtime/agents.runtime.yaml
+cp configs/runtime/hosts.runtime.template.yaml configs/runtime/hosts.runtime.yaml
+```
+
+Run commands with private runtime files explicitly:
+
+```bash
+python scripts/axonctl.py validate \
+  --network configs/runtime/network.runtime.yaml \
+  --agents configs/runtime/agents.runtime.yaml
 ```
 
 ## Layout

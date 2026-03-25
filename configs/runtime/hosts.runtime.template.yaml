@@ -1,0 +1,18 @@
+# Copy to a private file (ignored by git), e.g.:
+#   cp configs/runtime/hosts.runtime.template.yaml configs/runtime/hosts.runtime.yaml
+# Then replace placeholders with your real server details.
+
+hosts:
+  - name: "prod-server"
+    deployment_mode: "server"
+    host: "YOUR_SERVER_IP"
+    user: "YOUR_SSH_USER"
+    os_type: "linux"
+    os_version: "YOUR_OS_VERSION"
+    ssh_key: "/path/to/your/private-key.pem"
+    workdir: "/home/YOUR_SSH_USER/axon-agent-scale"
+    python_bin: "python3"
+    use_sudo: true
+    docker:
+      expected_engine: "docker"
+      expected_compose: "docker compose"

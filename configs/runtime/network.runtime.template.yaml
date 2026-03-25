@@ -1,0 +1,33 @@
+# Copy to a private file (ignored by git), e.g.:
+#   cp configs/runtime/network.runtime.template.yaml configs/runtime/network.runtime.yaml
+# Then use:
+#   python scripts/axonctl.py validate --network configs/runtime/network.runtime.yaml --agents configs/runtime/agents.runtime.yaml
+
+rpc_url: "https://mainnet-rpc.axonchain.ai/"
+evm_chain_id: 8210
+cosmos_chain_id: "axon_8210-1"
+gas:
+  max_gwei: 30
+  priority_gwei: 1
+deploy:
+  default_concurrency: 3
+  retry_times: 2
+heartbeat:
+  interval_blocks: 100
+  timeout_blocks: 720
+  prewarn_blocks: 120
+  max_retries: 3
+  backoff_seconds: 2
+  receipt_timeout_sec: 120
+challenge:
+  enabled: true
+  validator_required: true
+  non_llm_first: true
+  ai_challenge_window_blocks: 50
+  bank_source_url: "https://raw.githubusercontent.com/axon-chain/axon/main/x/agent/keeper/challenge.go"
+  answer_bank_file: "configs/challenge_answers.yaml"
+  execution_mode: "simulate"
+  openrouter:
+    api_base: "https://openrouter.ai/api/v1/chat/completions"
+    model_id: ""
+    fallback_models: []

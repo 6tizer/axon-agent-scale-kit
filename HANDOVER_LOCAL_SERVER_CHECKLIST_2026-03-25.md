@@ -2,13 +2,16 @@
 
 ## 1. 项目与版本基线
 
-- 本地仓库路径：`/Users/mac-mini/AXON-Chain/axon-agent-scale-kit`
+- 基线更新时间：`2026-03-25 18:23 CST`
+- 本地仓库路径：`/Users/mac-mini/Documents/Codex/axon-agent-scale-kit`
 - 当前分支：`main`
-- 当前提交：`07dddc3`
+- 当前提交：`abcdea3`
+- 远端同步状态：`HEAD == origin/main`
 - 关键状态文件：`state/deploy_state.json`
 - 关键配置文件：
   - `configs/network.yaml`
   - `configs/agents.yaml`
+  - `configs/hosts.yaml`
 
 ## 2. 服务器与登录信息
 
@@ -21,7 +24,7 @@
   - `ssh -i /Users/mac-mini/AXON-Chain/server/config/QQClaw.pem ubuntu@43.165.195.71`
 
 - 主机映射文件（本地）：
-  - `server/config/hosts.runtime.yaml`
+  - `configs/hosts.yaml`
 
 ## 3. 线上运行目录（Agent 相关）
 
@@ -98,7 +101,7 @@
 - 运行主机固定为：`43.165.195.71`
 - 运行目录固定为：`/home/ubuntu/axon-agent-scale`
 - 线上状态文件固定为：`/home/ubuntu/axon-agent-scale/state/deploy_state.json`
-- 本地状态文件固定为：`/Users/mac-mini/AXON-Chain/axon-agent-scale-kit/state/deploy_state.json`
+- 本地状态文件固定为：`/Users/mac-mini/Documents/Codex/axon-agent-scale-kit/state/deploy_state.json`
 
 ## 9. 运维常用命令（交接即用）
 
@@ -182,3 +185,21 @@
   - scale-kit 心跳守护：`axon-heartbeat-daemon.service`（`/home/ubuntu/axon-agent-scale`）
   - QQClaw 独立守护：`axon-agent-qqclaw.service`（`/opt/axon-node/scripts`）
   - 两套系统并行存在、职责不同，排障时必须先区分来源后再处理。
+
+## 14. 本次只读生产快照（2026-03-25）
+
+- 快照时间：`2026-03-25 18:23 CST`
+- 核对结果：`axon-heartbeat-daemon.service=active`，`axon-agent-qqclaw.service=active`
+- Docker 结果：8 个 agent 容器 + 1 个 `axon-node` 容器均在运行
+- 生命周期结果：`HEALTHY=8 / DEGRADED=0 / FAILED=0`
+- 详细记录：`docs/ops/prod_snapshot_2026-03-25.md`
+
+## 15. 统一发布入口（已落地）
+
+- 发布脚本：`scripts/release_deploy_verify.sh`
+  - 流程：`push -> deploy -> restart -> verify`
+  - 演练命令（不改线上）：`scripts/release_deploy_verify.sh --dry-run --allow-dirty --skip-tests`
+  - 正式命令：`scripts/release_deploy_verify.sh`
+- CI 基线：`.github/workflows/unittest.yml`
+  - 触发：push/pull_request 到 `main`
+  - 校验：`python -m unittest tests.test_axonctl -q`

@@ -1,4 +1,6 @@
 .venv/
+.DS_Store
+**/.DS_Store
 __pycache__/
 *.pyc
 state/*.json
@@ -19,4 +21,6 @@ tmp/**
 transfer_axon.js
 configs/recovery/*.yaml
 !configs/recovery/*.template.yaml
+configs/runtime/*.yaml
+!configs/runtime/*.template.yaml
 .trae/
