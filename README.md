@@ -38,6 +38,12 @@ python scripts/axonctl.py lifecycle-report --network configs/network.yaml --requ
 - Use masked output by default; use `--reveal-secret` only in a secure environment
 - Finish every run with `wallet-backup-export` and `wallet-backup-verify`
 
+## State Source of Truth
+
+- Runtime state source of truth is `state/deploy_state.json`
+- Historical snapshots are not used by the CLI runtime
+- Use `--state-file` only when you intentionally manage an isolated state context
+
 ## Scope
 
 - Validate network and agent configuration
@@ -90,6 +96,22 @@ python scripts/axonctl.py wallet-backup-export --output-file backups/wallets.sec
 python scripts/axonctl.py wallet-backup-verify --backup-file backups/wallets.secure.json
 ```
 **Backup all agent wallets after each scale run.** Keep backup file offline and encrypted.
+
+### Recover legacy agents from existing private keys
+```bash
+# single agent import
+python scripts/axonctl.py agent-wallet-import \
+  --agent agent-legacy-001 \
+  --private-key <hex_private_key> \
+  --address <optional_expected_address>
+
+# batch import template
+python scripts/axonctl.py agent-wallets-template --output configs/recovery/legacy_agents.template.yaml
+# copy template to private runtime path, fill it, then import
+cp configs/recovery/legacy_agents.template.yaml state/recovery/legacy_agents.yaml
+python scripts/axonctl.py agent-wallets-import --wallet-file state/recovery/legacy_agents.yaml
+```
+Imported agents are attached as `label=agent:<name>` and become manageable by heartbeat/challenge/lifecycle workflows.
 
 ## Quick Start
 
@@ -167,7 +189,9 @@ hosts:
 ## Layout
 
 - `configs/`: network and agent declaration files
+- `configs/recovery/`: recovery import templates (safe to version)
 - `scripts/`: CLI and execution scripts
-- `templates/`: legacy templates
+- `scripts/archive/`: historical one-off scripts (not part of active workflow)
+- `templates/archive/`: historical systemd template artifacts
 - `state/`: local state data (contains private keys — keep it safe)
 - `tests/`: regression test suite

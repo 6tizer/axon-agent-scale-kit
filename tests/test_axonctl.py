@@ -95,6 +95,61 @@ class AxonCtlRegressionTests(unittest.TestCase):
         state = axonctl.load_state(str(self.state_file))
         self.assertEqual(state["settings"]["funding_address"], self.valid_address)
 
+    def test_agent_wallet_template_and_import(self) -> None:
+        from eth_account import Account
+
+        wallet_file = self.base / "agent_wallet.template.yaml"
+        self.assertEqual(axonctl.agent_wallet_template(str(wallet_file)), 0)
+        data = yaml.safe_load(wallet_file.read_text(encoding="utf-8"))
+        pk = "1" * 64
+        addr = Account.from_key(f"0x{pk}").address
+        data["name"] = "agent-legacy-001"
+        data["private_key"] = pk
+        data["address"] = addr
+        wallet_file.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        self.assertEqual(
+            axonctl.agent_wallet_import(
+                state_file=str(self.state_file),
+                agent_name=data["name"],
+                private_key=data["private_key"],
+                address=data["address"],
+                mnemonic="",
+                overwrite=False,
+            ),
+            0,
+        )
+        state = axonctl.load_state(str(self.state_file))
+        self.assertEqual(state["agents"]["agent-legacy-001"]["wallet_address"], addr)
+        found = [w for w in state["wallets"].values() if w.get("label") == "agent:agent-legacy-001"]
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["address"], addr)
+
+    def test_agent_wallets_import_batch(self) -> None:
+        from eth_account import Account
+
+        batch_file = self.base / "agent_wallets.yaml"
+        pk1 = "2" * 64
+        pk2 = "3" * 64
+        addr1 = Account.from_key(f"0x{pk1}").address
+        addr2 = Account.from_key(f"0x{pk2}").address
+        batch_file.write_text(
+            yaml.safe_dump(
+                {
+                    "agents": [
+                        {"name": "agent-legacy-002", "private_key": pk1, "address": addr1},
+                        {"name": "agent-legacy-003", "private_key": pk2, "address": addr2},
+                    ]
+                },
+                sort_keys=False,
+                allow_unicode=True,
+            ),
+            encoding="utf-8",
+        )
+        self.assertEqual(axonctl.agent_wallets_import(str(self.state_file), str(batch_file), overwrite=False), 0)
+        state = axonctl.load_state(str(self.state_file))
+        self.assertEqual(state["agents"]["agent-legacy-002"]["wallet_address"], addr1)
+        self.assertEqual(state["agents"]["agent-legacy-003"]["wallet_address"], addr2)
+
     def test_request_create_rejects_insufficient_min_funding(self) -> None:
         code = axonctl.create_request(
             state_file=str(self.state_file),

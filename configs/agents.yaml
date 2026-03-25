@@ -1,4 +1,19 @@
 agents:
+  - name: "agent-legacy-006"
+    wallet_ref: "AXON_AGENT_LEGACY_006_KEY"
+    heartbeat_interval_sec: 30
+    auto_register: true
+    auto_stake: true
+  - name: "agent-legacy-007"
+    wallet_ref: "AXON_AGENT_LEGACY_007_KEY"
+    heartbeat_interval_sec: 30
+    auto_register: true
+    auto_stake: true
+  - name: "agent-legacy-008"
+    wallet_ref: "AXON_AGENT_LEGACY_008_KEY"
+    heartbeat_interval_sec: 30
+    auto_register: true
+    auto_stake: true
   - name: "agent-001"
     wallet_ref: "AXON_AGENT_001_KEY"
     heartbeat_interval_sec: 30
@@ -21,31 +36,6 @@ agents:
     auto_stake: true
   - name: "agent-005"
     wallet_ref: "AXON_AGENT_005_KEY"
-    heartbeat_interval_sec: 30
-    auto_register: true
-    auto_stake: true
-  - name: "agent-006"
-    wallet_ref: "AXON_AGENT_006_KEY"
-    heartbeat_interval_sec: 30
-    auto_register: true
-    auto_stake: true
-  - name: "agent-007"
-    wallet_ref: "AXON_AGENT_007_KEY"
-    heartbeat_interval_sec: 30
-    auto_register: true
-    auto_stake: true
-  - name: "agent-008"
-    wallet_ref: "AXON_AGENT_008_KEY"
-    heartbeat_interval_sec: 30
-    auto_register: true
-    auto_stake: true
-  - name: "agent-009"
-    wallet_ref: "AXON_AGENT_009_KEY"
-    heartbeat_interval_sec: 30
-    auto_register: true
-    auto_stake: true
-  - name: "agent-010"
-    wallet_ref: "AXON_AGENT_010_KEY"
     heartbeat_interval_sec: 30
     auto_register: true
     auto_stake: true

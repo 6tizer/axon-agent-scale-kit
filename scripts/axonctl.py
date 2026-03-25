@@ -1,5 +1,6 @@
 import argparse
 import base64
+import copy
 import hashlib
 import json
 import os
@@ -918,6 +919,159 @@ def funding_wallet_import(state_file: str, wallet_file: str) -> int:
     return 0
 
 
+def agent_wallet_template(output_file: str) -> int:
+    tpl = {
+        "name": "agent-001",
+        "address": "0x0000000000000000000000000000000000000000",
+        "private_key": "replace_with_private_key_without_0x_or_with_0x",
+        "mnemonic": "",
+    }
+    Path(output_file).write_text(yaml.safe_dump(tpl, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    print(json.dumps({"ok": True, "template_file": output_file}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def agent_wallets_template(output_file: str) -> int:
+    tpl = {
+        "agents": [
+            {
+                "name": "agent-001",
+                "address": "0x0000000000000000000000000000000000000000",
+                "private_key": "replace_with_private_key_without_0x_or_with_0x",
+                "mnemonic": "",
+            }
+        ]
+    }
+    Path(output_file).write_text(yaml.safe_dump(tpl, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    print(json.dumps({"ok": True, "template_file": output_file}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _normalize_private_key(private_key: str) -> str:
+    pk = (private_key or "").strip()
+    if pk.startswith("0x"):
+        pk = pk[2:]
+    return pk
+
+
+def _agent_wallet_import_to_state(
+    state: dict, agent_name: str, private_key: str, address: str | None, mnemonic: str | None, overwrite: bool
+) -> tuple[bool, dict]:
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", agent_name):
+        return False, {"ok": False, "agent": agent_name, "error": "invalid agent name"}
+    pk = _normalize_private_key(private_key)
+    if not re.fullmatch(r"[a-fA-F0-9]{64}", pk):
+        return False, {"ok": False, "agent": agent_name, "error": "invalid private_key"}
+    try:
+        from eth_account import Account
+
+        derived_address = Account.from_key(f"0x{pk}").address
+    except Exception as e:
+        return False, {"ok": False, "agent": agent_name, "error": f"failed to derive address from private_key: {e}"}
+    input_address = (address or "").strip()
+    if input_address:
+        if not is_valid_evm_address(input_address):
+            return False, {"ok": False, "agent": agent_name, "error": "invalid address format"}
+        if input_address.lower() != derived_address.lower():
+            return False, {"ok": False, "agent": agent_name, "error": "address does not match private_key derived address", "derived_address": derived_address}
+    label = f"agent:{agent_name}"
+    wallets = state.setdefault("wallets", {})
+    existing_label_id = None
+    existing_addr_id = None
+    for key_id, item in wallets.items():
+        item_addr = str(item.get("address", ""))
+        if item.get("role") == "agent" and item.get("label") == label:
+            existing_label_id = key_id
+        if item_addr and item_addr.lower() == derived_address.lower():
+            existing_addr_id = key_id
+            if item.get("role") == "agent" and item.get("label") and item.get("label") != label:
+                return False, {
+                    "ok": False,
+                    "agent": agent_name,
+                    "error": "address already bound to another agent",
+                    "address": derived_address,
+                    "bound_label": item.get("label"),
+                }
+    if existing_addr_id and wallets[existing_addr_id].get("role") == "funding":
+        return False, {"ok": False, "agent": agent_name, "error": "address already used by funding wallet", "address": derived_address}
+    target_id = existing_label_id or existing_addr_id
+    if existing_label_id and not overwrite:
+        existing = wallets[existing_label_id]
+        if str(existing.get("address", "")).lower() != derived_address.lower():
+            return False, {
+                "ok": False,
+                "agent": agent_name,
+                "error": "agent wallet already exists with different address, use --overwrite",
+                "existing_address": existing.get("address"),
+                "new_address": derived_address,
+            }
+        state.setdefault("agents", {}).setdefault(agent_name, {})
+        state["agents"][agent_name]["wallet_address"] = existing.get("address", derived_address)
+        state["agents"][agent_name].setdefault("registered", True)
+        state["agents"][agent_name].setdefault("staked", True)
+        state["agents"][agent_name].setdefault("service_active", False)
+        state["agents"][agent_name].setdefault("last_error", "")
+        return True, {"ok": True, "agent": agent_name, "reused": True, "key_id": existing_label_id, "address": existing.get("address", derived_address)}
+    existing_wallet = wallets.get(target_id, {}) if target_id else {}
+    key_id = target_id or str(uuid.uuid4())[:8]
+    wallets[key_id] = {
+        "address": derived_address,
+        "private_key": pk,
+        "role": "agent",
+        "label": label,
+        "mnemonic": mnemonic if mnemonic is not None else existing_wallet.get("mnemonic", ""),
+        "created_at": existing_wallet.get("created_at", now_ts()),
+    }
+    state.setdefault("agents", {}).setdefault(agent_name, {})
+    state["agents"][agent_name]["wallet_address"] = derived_address
+    state["agents"][agent_name].setdefault("registered", True)
+    state["agents"][agent_name].setdefault("staked", True)
+    state["agents"][agent_name].setdefault("service_active", False)
+    state["agents"][agent_name].setdefault("last_error", "")
+    state.setdefault("events", []).append({"ts": now_ts(), "type": "agent_wallet_import", "agent": agent_name, "key_id": key_id, "address": derived_address, "overwrite": overwrite})
+    action = "updated" if target_id else "imported"
+    return True, {"ok": True, "agent": agent_name, action: True, "key_id": key_id, "address": derived_address}
+
+
+def agent_wallet_import(state_file: str, agent_name: str, private_key: str, address: str | None, mnemonic: str | None, overwrite: bool) -> int:
+    state = load_state(state_file)
+    ok, payload = _agent_wallet_import_to_state(state, agent_name, private_key, address, mnemonic, overwrite)
+    if not ok:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 1
+    save_state(state_file, state)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def agent_wallets_import(state_file: str, wallet_file: str, overwrite: bool) -> int:
+    data = load_yaml(wallet_file)
+    rows = data.get("agents", [])
+    if not isinstance(rows, list) or not rows:
+        print(json.dumps({"ok": False, "error": "wallet file must contain non-empty agents list"}, ensure_ascii=False, indent=2))
+        return 1
+    state = load_state(state_file)
+    draft = copy.deepcopy(state)
+    imported = []
+    failed = []
+    for row in rows:
+        name = str((row or {}).get("name", "")).strip()
+        private_key = str((row or {}).get("private_key", "")).strip()
+        address = str((row or {}).get("address", "")).strip()
+        mnemonic = (row or {}).get("mnemonic")
+        ok, payload = _agent_wallet_import_to_state(draft, name, private_key, address, mnemonic, overwrite)
+        if ok:
+            imported.append(payload)
+        else:
+            failed.append(payload)
+    if failed:
+        print(json.dumps({"ok": False, "imported_count": len(imported), "failed_count": len(failed), "failed": failed}, ensure_ascii=False, indent=2))
+        return 1
+    save_state(state_file, draft)
+    print(json.dumps({"ok": True, "imported_count": len(imported), "items": imported}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def wallet_list(state_file: str) -> int:
     state = load_state(state_file)
     wallets = state.get("wallets", {})
@@ -1575,6 +1729,25 @@ def main() -> int:
     p_wallet_import.add_argument("--state-file", default="state/deploy_state.json")
     p_wallet_import.add_argument("--wallet-file", required=True)
 
+    p_agent_wallet_template = sub.add_parser("agent-wallet-template")
+    p_agent_wallet_template.add_argument("--output", default="agent_wallet.template.yaml")
+
+    p_agent_wallet_import = sub.add_parser("agent-wallet-import")
+    p_agent_wallet_import.add_argument("--state-file", default="state/deploy_state.json")
+    p_agent_wallet_import.add_argument("--agent", required=True)
+    p_agent_wallet_import.add_argument("--private-key", required=True)
+    p_agent_wallet_import.add_argument("--address")
+    p_agent_wallet_import.add_argument("--mnemonic")
+    p_agent_wallet_import.add_argument("--overwrite", action="store_true")
+
+    p_agent_wallets_template = sub.add_parser("agent-wallets-template")
+    p_agent_wallets_template.add_argument("--output", default="agent_wallets.template.yaml")
+
+    p_agent_wallets_import = sub.add_parser("agent-wallets-import")
+    p_agent_wallets_import.add_argument("--state-file", default="state/deploy_state.json")
+    p_agent_wallets_import.add_argument("--wallet-file", required=True)
+    p_agent_wallets_import.add_argument("--overwrite", action="store_true")
+
     p_init = sub.add_parser("init-step")
     p_init.add_argument("--mode", required=True, choices=["local", "server"])
     p_init.add_argument("--hosts")
@@ -1710,6 +1883,14 @@ def main() -> int:
         return funding_wallet_template(args.output)
     if args.cmd == "funding-wallet-import":
         return funding_wallet_import(args.state_file, args.wallet_file)
+    if args.cmd == "agent-wallet-template":
+        return agent_wallet_template(args.output)
+    if args.cmd == "agent-wallet-import":
+        return agent_wallet_import(args.state_file, args.agent, args.private_key, args.address, args.mnemonic, args.overwrite)
+    if args.cmd == "agent-wallets-template":
+        return agent_wallets_template(args.output)
+    if args.cmd == "agent-wallets-import":
+        return agent_wallets_import(args.state_file, args.wallet_file, args.overwrite)
     if args.cmd == "init-step":
         return init_step(args.mode, args.hosts, args.host)
     if args.cmd == "validate":

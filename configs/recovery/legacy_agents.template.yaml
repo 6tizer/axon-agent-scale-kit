@@ -1,0 +1,4 @@
+agents:
+  - name: "agent-legacy-001"
+    private_key: "REPLACE_WITH_HEX_PRIVATE_KEY"
+    address: "0xOPTIONAL_ADDRESS_FOR_MATCH_CHECK"
