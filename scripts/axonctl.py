@@ -1459,6 +1459,7 @@ def _agent_wallet_import_to_state(
         state["agents"][agent_name].setdefault("staked", True)
         state["agents"][agent_name].setdefault("service_active", False)
         state["agents"][agent_name].setdefault("last_error", "")
+        state["agents"][agent_name]["container_name"] = f"axon-agent-{agent_name}"
         return True, {"ok": True, "agent": agent_name, "reused": True, "key_id": existing_label_id, "address": existing.get("address", derived_address)}
     existing_wallet = wallets.get(target_id, {}) if target_id else {}
     key_id = target_id or str(uuid.uuid4())[:8]
@@ -1476,6 +1477,7 @@ def _agent_wallet_import_to_state(
     state["agents"][agent_name].setdefault("staked", True)
     state["agents"][agent_name].setdefault("service_active", False)
     state["agents"][agent_name].setdefault("last_error", "")
+    state["agents"][agent_name]["container_name"] = f"axon-agent-{agent_name}"
     state.setdefault("events", []).append({"ts": now_ts(), "type": "agent_wallet_import", "agent": agent_name, "key_id": key_id, "address": derived_address, "overwrite": overwrite})
     action = "updated" if target_id else "imported"
     return True, {"ok": True, "agent": agent_name, action: True, "key_id": key_id, "address": derived_address}
