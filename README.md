@@ -53,6 +53,24 @@ python scripts/axonctl.py lifecycle-report --network configs/network.yaml --requ
 - Execute idempotent scaling, status reports and repair actions
 - Generate, list, export and backup all wallet keys (funding + agent wallets)
 
+## Agent Architecture
+
+All agents are managed by the `axon-heartbeat-daemon.service` via `scripts/axonctl.py heartbeat-daemon`.
+The daemon automatically traverses all agent entries in `state/deploy_state.json` — no per-agent configuration is needed when adding new agents.
+
+**Managed agents:**
+
+| Agent | Address | Notes |
+|-------|---------|-------|
+| agent-001 ~ agent-005 | various | scale-kit managed |
+| agent-legacy-006 ~ agent-legacy-008 | various | scale-kit managed |
+| agent-009 | various | scale-kit managed |
+| qqclaw-validator | 0xA98d... | validator agent, migrated from standalone daemon |
+
+**AI Challenge participation** is handled via the heartbeat daemon's normal heartbeat
+(~500 s interval, HeartbeatInterval = 100 blocks), which triggers `IncrementEpochActivity()` on-chain.
+The standalone `axon-agent-qqclaw.service` has been retired; qqclaw-validator is now managed by heartbeat-daemon.
+
 ## On-Chain Register (payable)
 
 Registration must go through `IAgentRegistry.register(string,string)` at

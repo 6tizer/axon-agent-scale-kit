@@ -3,6 +3,7 @@ import base64
 import copy
 import hashlib
 import json
+import logging
 import os
 import re
 import shlex
@@ -14,6 +15,13 @@ from urllib import request
 
 import yaml
 
+logger = logging.getLogger("axonctl")
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%dT%H:%M:%S"))
+    logger.addHandler(_h)
+    logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
+
 REGISTRY_PRECOMPILE = "0x0000000000000000000000000000000000000801"
 DEFAULT_REGISTER_CAPABILITIES = "validation,heartbeat,docker-managed"
 DEFAULT_REGISTER_MODEL = "axon-agent-scale-kit-v1"
@@ -23,6 +31,8 @@ DEFAULT_REGISTER_BURN_EXPECTED_AXON = 20
 DEFAULT_REGISTER_EVIDENCE_MODE = "register_payable_path_proof"
 REGISTER_METHOD_SIGNATURE = "register(string,string)"
 REGISTER_ABI = [
+    # Source: https://github.com/axon-chain/axon/blob/main/precompiles/registry/registry.go
+    # IAgentRegistry at 0x0000000000000000000000000000000000000801 — 11 methods
     {
         "inputs": [{"name": "account", "type": "address"}],
         "name": "isAgent",
@@ -48,6 +58,59 @@ REGISTER_ABI = [
         "name": "register",
         "outputs": [],
         "stateMutability": "payable",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "addStake",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function",
+    },
+    {
+        "inputs": [{"name": "amount", "type": "uint256"}],
+        "name": "reduceStake",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "claimReducedStake",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
+        "inputs": [{"name": "account", "type": "address"}],
+        "name": "getStakeInfo",
+        "outputs": [
+            {"name": "totalStake", "type": "uint256"},
+            {"name": "pendingReduce", "type": "uint256"},
+            {"name": "reduceUnlockHeight", "type": "uint64"},
+        ],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"name": "capabilities", "type": "string"}, {"name": "model", "type": "string"}],
+        "name": "updateAgent",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "heartbeat",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "deregister",
+        "outputs": [],
+        "stateMutability": "nonpayable",
         "type": "function",
     },
 ]
@@ -846,6 +909,16 @@ def heartbeat_once(state_file: str, network: str, agent: str, max_retries: int |
                 "latency_ms": tx["latency_ms"],
             }
         )
+        # AI Challenge 窗口日志：如果心跳落在窗口期内，记录以证明参与
+        if isinstance(current_block, int):
+            epoch_length = int(network_cfg.get("epoch_blocks", 720))
+            ai_challenge_window = int(network_cfg.get("ai_challenge_window_blocks", 50))
+            block_in_epoch = current_block % epoch_length
+            if block_in_epoch < ai_challenge_window:
+                logger.info(
+                    f"[AI Challenge Window] agent={agent} epoch_offset={block_in_epoch}/{ai_challenge_window}, "
+                    f"tx={tx['tx_hash']} block={tx['block_height']} — heartbeat ensures AI Challenge participation"
+                )
         save_state(state_file, state)
         print(json.dumps({"ok": True, "agent": agent, "status": "sent", **tx}, ensure_ascii=False, indent=2))
         return 0
@@ -1075,10 +1148,10 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
         save_state(state_file, state)
         print(json.dumps({"ok": False, "error": "answer hash mismatch", "question": question, "actual_hash": actual_hash, "expected_hash": expected_hash}, ensure_ascii=False, indent=2))
         return 1
-    challenge_id = str(uuid.uuid4())
+    challenge_id = f"sim-{commit_hash[:16]}"
     commit_hash = answer_hash(f"{agent}:{question}:{answer}")
-    commit_tx = f"0x{uuid.uuid4().hex}"
-    reveal_tx = f"0x{uuid.uuid4().hex}"
+    commit_tx = f"simulate:{commit_hash[:16]}"
+    reveal_tx = f"simulate:{commit_hash[16:]}"
     state.setdefault("agents", {}).setdefault(agent, {})
     state["agents"][agent]["last_challenge_question"] = question
     state["agents"][agent]["last_challenge_hash"] = expected_hash
@@ -1086,6 +1159,7 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
     state["agents"][agent]["last_challenge_reveal_tx"] = reveal_tx
     state["agents"][agent]["last_challenge_at"] = now_ts()
     state["agents"][agent]["last_challenge_result"] = "success"
+    state["agents"][agent]["last_challenge_execution_mode"] = cfg.get("execution_mode", "simulate")
     state["events"].append(
         {
             "ts": now_ts(),
@@ -1115,6 +1189,12 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
                 "commit_tx": commit_tx,
                 "reveal_tx": reveal_tx,
                 "block_height": current_block,
+                "execution_mode": cfg.get("execution_mode", "unknown"),
+                "participation_note": (
+                    "heartbeat_only: AI Challenge participation via heartbeat-daemon normal heartbeat. "
+                    "Real SubmitAIChallengeResponse+RevealAIChallengeResponse requires Cosmos SDK path "
+                    "(not EVM precompile) — not yet implemented in scale-kit."
+                ),
             },
             ensure_ascii=False,
             indent=2,
@@ -2150,6 +2230,8 @@ def evaluate_agent_health(agent_name: str, item: dict, network_cfg: dict, curren
         "service_active": bool(item.get("service_active")),
         "last_heartbeat_block": item.get("last_heartbeat_block"),
         "last_challenge_result": item.get("last_challenge_result", ""),
+        "ai_challenge_participation": "heartbeat_daemon",
+        "challenge_execution_mode": item.get("last_challenge_execution_mode") or network_cfg.get("challenge", {}).get("execution_mode", "simulate"),
     }
 
 
