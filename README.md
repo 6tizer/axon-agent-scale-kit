@@ -24,7 +24,7 @@ python scripts/axonctl.py init-step --mode local
 python scripts/axonctl.py wallet-generate --role funding --label "my-funding"
 python scripts/axonctl.py validate --network configs/network.yaml --agents configs/agents.yaml
 python scripts/axonctl.py run-intent --network configs/network.yaml --agents configs/agents.yaml --intent "I fund 250 AXON, scale 2 agents"
-python scripts/axonctl.py remote-deploy --state-file state/deploy_state.json --request-id <request_id> --hosts configs/hosts.yaml --host your-server --network configs/network.yaml --agents configs/agents.yaml
+python scripts/axonctl.py remote-deploy --state-file state/deploy_state.json --request-id <request_id> --hosts configs/runtime/hosts.runtime.yaml --host your-server --network configs/network.yaml --agents configs/agents.yaml
 python scripts/axonctl.py heartbeat-batch --network configs/network.yaml --request-id <request_id>
 python scripts/axonctl.py challenge-batch --network configs/network.yaml --request-id <request_id>
 python scripts/axonctl.py lifecycle-report --network configs/network.yaml --request-id <request_id>
@@ -137,7 +137,7 @@ for each agent, plus summary counters:
 python scripts/axonctl.py init-step --mode local
 
 # server dependency check/install (docker + directories)
-python scripts/axonctl.py init-step --mode server --hosts configs/hosts.yaml --host your-server
+python scripts/axonctl.py init-step --mode server --hosts configs/runtime/hosts.runtime.yaml --host your-server
 ```
 
 ## One-Command Release (Push -> Deploy -> Restart -> Verify)
@@ -234,7 +234,7 @@ python scripts/axonctl.py run-intent \
 python scripts/axonctl.py remote-deploy \
   --state-file state/deploy_state.json \
   --request-id <request_id> \
-  --hosts configs/hosts.yaml \
+  --hosts configs/runtime/hosts.runtime.yaml \
   --host your-server \
   --network configs/network.yaml \
   --agents configs/agents.yaml
@@ -243,7 +243,7 @@ python scripts/axonctl.py remote-deploy \
 python scripts/axonctl.py remote-status \
   --state-file state/deploy_state.json \
   --request-id <request_id> \
-  --hosts configs/hosts.yaml \
+  --hosts configs/runtime/hosts.runtime.yaml \
   --host your-server
 
 # 6. export and backup all agent wallet keys
@@ -262,24 +262,8 @@ python scripts/axonctl.py lifecycle-repair --network configs/network.yaml --requ
 
 ## Remote Host Config
 
-`configs/hosts.yaml` defines real deployment target hosts for SSH/SCP + Docker:
-
-```yaml
-hosts:
-  - name: "your-server"
-    deployment_mode: "server"
-    host: "YOUR_SERVER_IP"
-    user: "YOUR_SSH_USER"
-    os_type: "linux"
-    os_version: "YOUR_OS_VERSION"
-    ssh_key: "/path/to/your/private-key.pem"
-    workdir: "/home/YOUR_SSH_USER/axon-agent-scale"
-    python_bin: "python3"
-    use_sudo: true
-    docker:
-      expected_engine: "docker"
-      expected_compose: "docker compose"
-```
+See `configs/runtime/hosts.runtime.template.yaml` for the schema.
+Copy it to `configs/runtime/hosts.runtime.yaml` (gitignored) and fill in real values.
 
 ## Runtime Private Config Layer
 

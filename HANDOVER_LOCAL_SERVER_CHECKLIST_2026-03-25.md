@@ -11,7 +11,7 @@
 - 关键配置文件：
   - `configs/network.yaml`
   - `configs/agents.yaml`
-  - `configs/hosts.yaml`
+  - `configs/runtime/hosts.runtime.yaml`
 
 ## 2. 服务器与登录信息
 
@@ -24,7 +24,7 @@
   - `ssh -i /Users/mac-mini/AXON-Chain/server/config/QQClaw.pem ubuntu@43.165.195.71`
 
 - 主机映射文件（本地）：
-  - `configs/hosts.yaml`
+  - `configs/runtime/hosts.runtime.yaml`
 
 ## 3. 线上运行目录（Agent 相关）
 

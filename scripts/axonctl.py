@@ -2571,7 +2571,7 @@ def main() -> int:
     p_remote_deploy = sub.add_parser("remote-deploy")
     p_remote_deploy.add_argument("--state-file", default="state/deploy_state.json")
     p_remote_deploy.add_argument("--request-id", required=True)
-    p_remote_deploy.add_argument("--hosts", default="configs/hosts.yaml")
+    p_remote_deploy.add_argument("--hosts", default="configs/runtime/hosts.runtime.yaml")
     p_remote_deploy.add_argument("--host", required=True)
     p_remote_deploy.add_argument("--network", required=True)
     p_remote_deploy.add_argument("--agents", required=True)
@@ -2580,7 +2580,7 @@ def main() -> int:
     p_remote_status = sub.add_parser("remote-status")
     p_remote_status.add_argument("--state-file", default="state/deploy_state.json")
     p_remote_status.add_argument("--request-id", required=True)
-    p_remote_status.add_argument("--hosts", default="configs/hosts.yaml")
+    p_remote_status.add_argument("--hosts", default="configs/runtime/hosts.runtime.yaml")
     p_remote_status.add_argument("--host", required=True)
 
     p_heartbeat_once = sub.add_parser("heartbeat-once")
