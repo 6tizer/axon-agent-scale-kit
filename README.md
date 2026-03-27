@@ -2,6 +2,8 @@
 
 Scale, operate, and secure AXON Agents with one CLI-first workflow.
 
+> **For contributors and AI agents:** Start at [`docs/DEVELOPER_REFERENCE.md`](docs/DEVELOPER_REFERENCE.md) — chain constants, CLI reference, SSH paths, and protocol facts are all there.
+
 Production-oriented automation for funded scaling, remote deployment, heartbeat, AI challenge execution, lifecycle repair, and wallet governance.
 
 ## Capabilities
