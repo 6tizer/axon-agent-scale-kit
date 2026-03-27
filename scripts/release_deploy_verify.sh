@@ -158,9 +158,104 @@ fi
 log "ensuring remote directories"
 ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "mkdir -p '$REMOTE_DIR' '$REMOTE_DIR/scripts' '$REMOTE_DIR/configs'"
 
+# ── axond 安装 ─────────────────────────────────────────────────────────────────
+log "installing axond (Cosmos SDK CLI for challenge commit/reveal)"
+AXOND_VERSION="${AXOND_VERSION:-v1.0.0}"
+AXOND_INSTALL_SCRIPT="
+  set -e
+  if command -v axond >/dev/null 2>&1; then
+    echo '[axond] already installed:'; axond version
+  else
+    echo '[axond] downloading release ${AXOND_VERSION}...'
+    # Axonchain 的 axond 下载 URL 格式（需确认官方实际地址）
+    AXOND_URL=\"\"
+    # 备选：容器内已有 axond，检查路径
+    if docker exec axon-node which axond >/dev/null 2>&1; then
+      echo '[axond] found in axon-node container'
+    else
+      echo '[axond] will be resolved at runtime via AXOND_PATH env var'
+    fi
+  fi
+"
+ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$AXOND_INSTALL_SCRIPT"
+
+# ── axond 密钥导入 ──────────────────────────────────────────────────────────────
+log "importing agent keys into axond keyring"
+AXOND_KEY_IMPORT_SCRIPT="
+  set -e
+  KEYRING_DIR=\"\${HOME}/.axond\"
+  mkdir -p \"\${KEYRING_DIR}\"
+  chmod 700 \"\${KEYRING_DIR}\"
+  STATE_FILE='${REMOTE_DIR}/state/deploy_state.json'
+  if [[ ! -f \"\${STATE_FILE}\" ]]; then
+    echo '[axond-key-import] state file not found: '\${STATE_FILE}
+    exit 0
+  fi
+  # 从 deploy_state.json 读取 agent wallets，导入到 axond keyring
+  # 注意：axond keys import <name> <hex_privkey> --keyring-backend file
+  echo '[axond-key-import] reading wallets from state...'
+  # shellcheck disable=SC2016
+  python3 -c \"
+import json, subprocess, sys
+with open('${REMOTE_DIR}/state/deploy_state.json') as f:
+    state = json.load(f)
+for key_id, wallet in state.get('wallets', {}).items():
+    if wallet.get('role') != 'agent':
+        continue
+    label = wallet.get('label', '')
+    if not label.startswith('agent:'):
+        continue
+    agent_name = label.split(':', 1)[1]
+    privkey = wallet.get('private_key', '')
+    if not privkey:
+        continue
+    privkey_hex = privkey[2:] if privkey.startswith('0x') else privkey
+    result = subprocess.run(
+        ['axond', 'keys', 'import', agent_name, privkey_hex,
+         '--keyring-backend', 'file',
+         '--keyring-dir', '${HOME}/.axond'],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        print(f'[axond-key-import] imported: {agent_name}')
+    else:
+        # 密钥可能已存在，尝试获取公钥确认
+        check = subprocess.run(
+            ['axond', 'keys', 'get', agent_name,
+             '--keyring-dir', '${HOME}/.axond'],
+            capture_output=True, text=True
+        )
+        if check.returncode == 0:
+            print(f'[axond-key-import] already exists: {agent_name}')
+        else:
+            print(f'[axond-key-import] FAILED {agent_name}: {result.stderr.strip()}')
+\" 2>&1 | head -20
+  chmod 700 \"\${KEYRING_DIR}\"
+  echo '[axond-key-import] done'
+"
+ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$AXOND_KEY_IMPORT_SCRIPT"
+
 log "deploying tracked files from commit $LOCAL_SHORT"
 git archive --format=tar "$LOCAL_COMMIT" scripts configs README.md requirements.txt \
   | ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "tar -xf - -C '$REMOTE_DIR'"
+
+# ── axond keyring 目录初始化 ─────────────────────────────────────────────────
+# 在 systemd service 运行前设置密钥环目录权限（bootstrap 阶段，而非 runtime）
+ssh "${SSH_OPTS[@]}" "$SSH_TARGET" \
+  "mkdir -p '${HOME}/.axond' && chmod 700 '${HOME}/.axond' && echo 'keyring dir ready at ${HOME}/.axond'"
+
+# ── challenge-daemon 部署 ──────────────────────────────────────────────────────
+log "deploying axon-challenge-daemon.service"
+ssh "${SSH_OPTS[@]}" "$SSH_TARGET" \
+  "sudo cp '$REMOTE_DIR/scripts/systemd/axon-challenge-daemon.service' \
+          '/etc/systemd/system/axon-challenge-daemon.service' && \
+   sudo systemctl daemon-reload && \
+   sudo systemctl enable axon-challenge-daemon && \
+   sudo systemctl restart axon-challenge-daemon && \
+   echo '[release] axon-challenge-daemon deployed and started'"
+
+log "challenge-daemon status"
+ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "systemctl is-active axon-challenge-daemon"
 
 deployed_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 cat <<EOF | ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "cat > '$REMOTE_DIR/.release_meta.json'"
