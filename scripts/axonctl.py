@@ -1149,8 +1149,8 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
         save_state(state_file, state)
         print(json.dumps({"ok": False, "error": "answer hash mismatch", "question": question, "actual_hash": actual_hash, "expected_hash": expected_hash}, ensure_ascii=False, indent=2))
         return 1
-    challenge_id = f"sim-{commit_hash[:16]}"
     commit_hash = answer_hash(f"{agent}:{question}:{answer}")
+    challenge_id = f"sim-{commit_hash[:16]}"
     commit_tx = f"simulate:{commit_hash[:16]}"
     reveal_tx = f"simulate:{commit_hash[16:]}"
     state.setdefault("agents", {}).setdefault(agent, {})
