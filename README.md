@@ -238,6 +238,7 @@ Imported agents are attached as `label=agent:<name>` and become manageable by he
 ## Quick Start
 
 > **Requires Python >= 3.10** (3.9 is incompatible — the codebase uses `int | None` union-type syntax).
+> If `python3.11` is not found: **macOS**: `brew install python@3.11` then use `python3.11`; **Linux**: `sudo apt install python3.11-venv` or check your distribution's package.
 
 ```bash
 python3.11 -m venv .venv
