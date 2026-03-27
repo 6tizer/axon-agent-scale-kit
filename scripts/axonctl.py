@@ -895,6 +895,7 @@ def heartbeat_once(state_file: str, network: str, agent: str, max_retries: int |
     if ok:
         state.setdefault("agents", {}).setdefault(agent, {})
         state["agents"][agent]["heartbeat_at"] = now_ts()
+        state["agents"][agent]["service_active"] = True  # 即使没有容器，心跳成功即标记 active
         state["agents"][agent]["last_heartbeat_block"] = tx["block_height"]
         state["agents"][agent]["last_heartbeat_tx"] = tx["tx_hash"]
         state["agents"][agent]["last_error"] = ""

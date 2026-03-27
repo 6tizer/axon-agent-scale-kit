@@ -19,7 +19,9 @@ These files are the **source of truth**. Do not rely on memory or assumptions ab
 - **SSH key for server:** `/Users/tizerluo/Downloads/QQClaw.pem`
 - **Server:** `ubuntu@43.165.195.71`, workdir `/home/ubuntu/axon-agent-scale`
 - **Protected branch:** `main` (never push directly; all changes via PR)
-- **Managed agents:** `agent-001`–`agent-005`, `agent-legacy-006`–`agent-legacy-008`, `agent-009`, `qqclaw-validator`
+- **Managed agents:** `agent-001`–`agent-005`, `agent-legacy-006`–`agent-legacy-008`, `agent-009`, `qqclaw-validator`（共 10 个，全部 registered=true, staked=true）
+- **State source:** `state/deploy_state.json` 已与服务器同步（block 164901 心跳），所有 agent 链上在线
+- **qqclaw-validator 特殊情况：** 由 `axon-heartbeat-daemon.service` 统一发心跳，无独立 Docker 容器，`service_active` 由 heartbeat-batch 自动维护
 
 ## Red Lines (Forbidden Actions)
 

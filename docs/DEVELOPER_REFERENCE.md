@@ -131,7 +131,10 @@ Key rule: **never push directly to `main`; all changes go through PR.**
 | Service | Unit File | Status |
 |---------|-----------|--------|
 | Heartbeat Daemon (scale-kit) | `axon-heartbeat-daemon.service` | active |
-| QQClaw Validator (retiring) | `axon-agent-qqclaw.service` | disabled (hotfixed 2026-03-27) |
+| QQClaw Validator (migrated) | `axon-agent-qqclaw.service` | disabled (migrated 2026-03-27) |
+
+> `qqclaw-validator` agent 已完成迁徙，由 `axon-heartbeat-daemon.service` 统一维护心跳。
+> 旧 daemon `axon-agent-qqclaw.service` 已 disabled，内容归档至 `scripts/archive/`。
 
 ---
 
