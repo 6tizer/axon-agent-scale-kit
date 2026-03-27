@@ -5,8 +5,8 @@
 - 基线更新时间：`2026-03-27 CST`
 - 本地仓库路径：`/Users/tizerluo/Cursor2026/AXON/axon-agent-scale-kit`
 - 当前分支：`docs/collaboration-workflow`
-- 当前提交：`6db57f4`
-- 远端同步状态：`HEAD == origin/feature/cursor-dev`
+- 当前提交：`cfadb3e`
+- 远端同步状态：`docs/collaboration-workflow 领先 origin/main (d88c68d) 4 个 commit；PR #2 (docs/collaboration-workflow) 待 6tizer review`
 - 关键状态文件：`state/deploy_state.json`
 - 关键配置文件：
   - `configs/network.yaml`

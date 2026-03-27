@@ -20,7 +20,7 @@ Production-oriented automation for funded scaling, remote deployment, heartbeat,
 ## 10-Line Quick Start
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python scripts/axonctl.py init-step --mode local
 python scripts/axonctl.py wallet-generate --role funding --label "my-funding"
@@ -237,8 +237,10 @@ Imported agents are attached as `label=agent:<name>` and become manageable by he
 
 ## Quick Start
 
+> **Requires Python >= 3.10** (3.9 is incompatible — the codebase uses `int | None` union-type syntax).
+
 ```bash
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 

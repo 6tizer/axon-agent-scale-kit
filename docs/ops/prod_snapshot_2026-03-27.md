@@ -2,8 +2,8 @@
 
 - 采集时间：`2026-03-27 CST`
 - 本地仓库：`/Users/tizerluo/Cursor2026/AXON/axon-agent-scale-kit`
-- 本地分支/提交：`docs/collaboration-workflow` / `ae81dfb`
-- 远端同步：PR #1（container_name fix）已 merge 到 upstream/main
+- 本地分支/提交：`docs/collaboration-workflow` / `cfadb3e`
+- 远端同步：PR #2 (docs/collaboration-workflow, cfadb3e) 待 6tizer review；领先 origin/main (d88c68d) 4 个 commit
 
 ## 1. 健康状态摘要
 
