@@ -61,11 +61,32 @@
 2. **腾讯云云防火墙（Cloud Firewall）**：如有开通，可在云防火墙控制台查看 22 端口策略。
 3. **网络层面差异**：Cursor Agent 运行环境与你本机可能走了不同出口，腾讯云对不同来源的路由/策略不同。
 
-### 四端进度结论（最终）
+### Cursor Agent（我这边）连接状态记录
 
-| 端 | 状态 |
-|----|------|
-| **本地** | 分支 `feature/challenge-real-tx`，`0ec4ec8`。 |
-| **tizerluo GitHub** | `origin/main` = `7bfaf3d`；`origin/feature/challenge-real-tx` = `0ec4ec8`。 |
-| **6tizer GitHub** | `upstream/main` = `049714d`（当前 `main` 线领先）。 |
-| **服务器 (43.165.195.71)** | sshd / 密钥 / 公网访问均正常，**你本机可 SSH 登录**；Cursor Agent 出口 IP（`103.142.140.56`）无法握手，需在腾讯云控制台将该 IP 或关闭「登录 IP 限制」后方可从 Agent SSH。 |
+| 尝试次数 | 出口 IP | SSH 结果 |
+|---------|---------|---------|
+| 第1次 | `103.142.140.56` | ❌ 握手被关 |
+| 第2次 | `27.38.239.181` | ✅ `CONNECT_OK` |
+| 第3次（验证） | `27.38.239.181` | ✅ 成功读取 `.release_meta.json` |
+
+### 服务器当前状态
+
+- **hostname**: `VM-0-13-ubuntu`
+- **部署 commit** (`.release_meta.json`): `7bfaf3d3c0cb1626584834a1362c760111c99d2d`（`2026-03-27T11:13:23Z` 部署）
+- **Git 仓库**: 服务器上 **不存在 `.git` 目录**，是 tar 包解压部署，非 clone
+- **部署 SHA 与 tizerluo GitHub `main` 一致**：服务器运行的就是 `tizerluo/main` 的 `7bfaf3d`
+
+### IP 限制分析
+
+- 第1次失败（`103.142.140.56`）与第2次成功（`27.38.239.181`）出口 IP 不同，但均来自 Cursor Agent 的云端 IP 池
+- 腾讯云侧**未发现永久 IP 黑名单**，可能是当时的 rate limit 或 TCP 连接抖动
+- 你本机 VNC 登录成功 IP 为 `106.55.203.47`，与 Agent 的云端 IP 池（`27.x` / `103.x` / `43.x`）不在同一网段
+
+### 四端 SHA 对照（最新）
+
+| 端 | SHA | 备注 |
+|----|-----|------|
+| 本地 `feature/challenge-real-tx` | `0ec4ec8` | 待推送/合并 |
+| tizerluo `main` | `7bfaf3d` | 与服务器部署一致 ✅ |
+| 6tizer `main` | `049714d` | `main` 线领先（比 `7bfaf3d` 新 4 个 commit） |
+| 服务器 | `7bfaf3d` | 与 `tizerluo/main` 一致 ✅ |
