@@ -371,10 +371,10 @@ if DEPLOY_CHALLENGE == "1":
     )
     run(["sudo", "tee", CHALLENGE_DROPIN], input=CHALLENGE_EXEC.encode(), check=False)
     log("systemd override written: " + CHALLENGE_DROPIN)
+    run(["sudo", "systemctl", "daemon-reload"], check=False)
     log("restarting axon-challenge-daemon")
     run(["sudo", "systemctl", "is-active", "axon-challenge-daemon"], check=False)
     run(["sudo", "systemctl", "restart", "axon-challenge-daemon"], check=True)
-    run(["sudo", "systemctl", "daemon-reload"], check=False)
 
 time.sleep(3)
 
@@ -607,10 +607,10 @@ if DEPLOY_CHALLENGE == "1":
     )
     run(["sudo", "tee", CHALLENGE_DROPIN], input=CHALLENGE_EXEC.encode(), check=False)
     log("systemd override written: " + CHALLENGE_DROPIN)
+    run(["sudo", "systemctl", "daemon-reload"], check=False)
     log("restarting axon-challenge-daemon")
     run(["sudo", "systemctl", "is-active", "axon-challenge-daemon"], check=False)
     run(["sudo", "systemctl", "restart", "axon-challenge-daemon"], check=True)
-    run(["sudo", "systemctl", "daemon-reload"], check=False)
 
 time.sleep(3)
 
