@@ -948,6 +948,63 @@ class AxonCtlRegressionTests(unittest.TestCase):
         errs = axonctl.validate_challenge_settings(cfg)
         self.assertTrue(any("execution_mode" in e for e in errs))
 
+    def test_parse_challenge_response_all_formats(self) -> None:
+        from scripts import axond_tx as _tx
+
+        # 格式 1：{"challenge": {...}}
+        r = _tx._parse_challenge_response({
+            "challenge": {
+                "epoch": 42,
+                "deadline_block": 1000,
+                "challenge_hash": "abc123",
+                "challenge_data": "data1",
+                "category": "math",
+            }
+        })
+        self.assertIsNotNone(r)
+        self.assertEqual(r["epoch"], 42)
+        self.assertEqual(r["deadline_block"], 1000)
+        self.assertEqual(r["challenge_hash"], "abc123")
+
+        # 格式 2：直接 challenge 对象
+        r = _tx._parse_challenge_response({
+            "epoch": 99,
+            "deadline_block": 5000,
+            "challenge_hash": "def456",
+            "challenge_data": "data2",
+            "category": "logic",
+        })
+        self.assertIsNotNone(r)
+        self.assertEqual(r["epoch"], 99)
+        self.assertEqual(r["deadline_block"], 5000)
+
+        # 格式 3：Axon Cosmos SDK REST API 格式 {"data": {"challenge": {...}}}
+        r = _tx._parse_challenge_response({
+            "data": {
+                "challenge": {
+                    "epoch": 7,
+                    "deadline_block": 7777,
+                    "challenge_hash": "nested123",
+                    "challenge_data": "nested_data",
+                    "category": "puzzles",
+                }
+            }
+        })
+        self.assertIsNotNone(r)
+        self.assertEqual(r["epoch"], 7)
+        self.assertEqual(r["deadline_block"], 7777)
+        self.assertEqual(r["challenge_hash"], "nested123")
+
+        # 格式 3 缺失 challenge 字段时应返回 None
+        r = _tx._parse_challenge_response({"data": {}})
+        self.assertIsNone(r)
+
+        # 空数据应返回 None
+        r = _tx._parse_challenge_response({})
+        self.assertIsNone(r)
+        r = _tx._parse_challenge_response({"data": None})
+        self.assertIsNone(r)
+
     def test_challenge_validate_window_blocks_required(self) -> None:
         cfg = {
             "enabled": True,
