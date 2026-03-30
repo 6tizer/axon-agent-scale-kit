@@ -221,6 +221,12 @@ def _parse_challenge_response(data: dict) -> dict | None:
     if isinstance(data, dict) and ("epoch" in data or "Epoch" in data):
         challenge = data
 
+    # 格式 3：Cosmos SDK 标准 REST API 格式 {"data": {"challenge": {...}}}
+    # Axon chain /cosmos/agent/v1/challenges/current 返回此格式。
+    # 如果前面的路径都没有命中，尝试此嵌套路径。
+    if not challenge and isinstance(data.get("data"), dict):
+        challenge = data["data"].get("challenge")
+
     if not challenge:
         return None
 
