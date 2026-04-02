@@ -276,49 +276,71 @@ def query_tx_status(tx_hash: str, rest_url: str = COSMOS_BROADCAST_URL) -> dict:
 def build_submit_tx(agent_name: str, epoch: int, commit_hash: str,
                     chain_id: str, keyring_dir: str,
                     broadcast_mode: str = "sync",
-                    keyring_backend: str = "test") -> list[str]:
+                    keyring_backend: str = "test",
+                    node_url: str = "",
+                    fees: str = "") -> list[str]:
     """
     构建 axond submit-challenge 命令参数。
 
     axond tx agent submit-challenge [epoch] [answer]
     answer = commit_hash (sha256 十六进制)
     --from 指定签名者（axond keyring 中的密钥名）
+
+    node_url: CometBFT RPC 端点，若不传则 axond 默认连 localhost:26657。
+              务必传入公共节点（如 mainnet-cometbft.axonchain.ai），
+              否则本地未同步节点会拒绝交易并返回 -32603 Internal 错误。
+    fees:     链上最低 gas fee（如 "300000000000000aaxon"），不传则链会
+              以 insufficient fee 拒绝交易。
     """
-    return [
+    cmd = [
         "tx", "agent", "submit-challenge",
-        str(epoch),              # positional: epoch
-        commit_hash,             # positional: answer (= commit_hash hex)
-        "--from", agent_name,     # signer key name in keyring
+        str(epoch),
+        commit_hash,
+        "--from", agent_name,
         "--chain-id", chain_id,
         "--keyring-dir", str(Path(keyring_dir).expanduser()),
         "--keyring-backend", keyring_backend,
         "--broadcast-mode", broadcast_mode,
         "--yes",
     ]
+    if node_url:
+        cmd += ["--node", node_url]
+    if fees:
+        cmd += ["--fees", fees]
+    return cmd
 
 
 def build_reveal_tx(agent_name: str, epoch: int, reveal_data: str,
                     chain_id: str, keyring_dir: str,
                     broadcast_mode: str = "sync",
-                    keyring_backend: str = "test") -> list[str]:
+                    keyring_backend: str = "test",
+                    node_url: str = "",
+                    fees: str = "") -> list[str]:
     """
     构建 axond reveal-challenge 命令参数。
 
     axond tx agent reveal-challenge [epoch] [answer]
     answer = 原始答案文本
     --from 指定签名者（axond keyring 中的密钥名）
+
+    node_url / fees: 同 build_submit_tx。
     """
-    return [
+    cmd = [
         "tx", "agent", "reveal-challenge",
-        str(epoch),              # positional: epoch
-        reveal_data,             # positional: answer (= raw answer text)
-        "--from", agent_name,    # signer key name in keyring
+        str(epoch),
+        reveal_data,
+        "--from", agent_name,
         "--chain-id", chain_id,
         "--keyring-dir", str(Path(keyring_dir).expanduser()),
         "--keyring-backend", keyring_backend,
         "--broadcast-mode", broadcast_mode,
         "--yes",
     ]
+    if node_url:
+        cmd += ["--node", node_url]
+    if fees:
+        cmd += ["--fees", fees]
+    return cmd
 
 
 def submit_tx(args: list[str], dry_run: bool = False,
@@ -441,17 +463,18 @@ class AxondClient:
     """
 
     def __init__(self, network_cfg: dict, state_file: str):
-        self.rest_url = network_cfg.get("cosmos", {}).get(
-            "rest_url", COSMOS_BROADCAST_URL)
-        self.chain_id = network_cfg.get("cosmos", {}).get(
-            "chain_id", "axon_8210-1")
-        self.keyring_dir = network_cfg.get("cosmos", {}).get(
-            "keyring_dir", "~/.axond")
-        self.broadcast_mode = network_cfg.get("cosmos", {}).get(
-            "broadcast_mode", "sync")
+        cosmos = network_cfg.get("cosmos", {})
+        self.rest_url = cosmos.get("rest_url", COSMOS_BROADCAST_URL)
+        self.chain_id = cosmos.get("chain_id", "axon_8210-1")
+        self.keyring_dir = cosmos.get("keyring_dir", "~/.axond")
+        self.broadcast_mode = cosmos.get("broadcast_mode", "sync")
         # 密钥用 test backend 导入，tx 也必须用 test
-        self.keyring_backend = network_cfg.get("cosmos", {}).get(
-            "keyring_backend", "test")
+        self.keyring_backend = cosmos.get("keyring_backend", "test")
+        # CometBFT RPC 端点（axond tx 使用）。若本地节点未同步，
+        # 不传此值将导致 -32603 Internal 错误。
+        self.cometbft_rpc_url = cosmos.get("cometbft_rpc_url", "")
+        # 链上最低 gas fee，如 "300000000000000aaxon"
+        self.fees = cosmos.get("fees", "")
         self.state_file = state_file
         self._state: dict | None = None
         self._evm_addr_cache: dict[str, str] = {}
@@ -565,6 +588,8 @@ class AxondClient:
             keyring_dir=self.keyring_dir,
             broadcast_mode=self.broadcast_mode,
             keyring_backend=self.keyring_backend,
+            node_url=self.cometbft_rpc_url,
+            fees=self.fees,
         )
 
         ok, tx_or_err, raw = submit_tx(args, dry_run=dry_run)
@@ -614,6 +639,8 @@ class AxondClient:
             keyring_dir=self.keyring_dir,
             broadcast_mode=self.broadcast_mode,
             keyring_backend=self.keyring_backend,
+            node_url=self.cometbft_rpc_url,
+            fees=self.fees,
         )
 
         ok, tx_or_err, raw = submit_tx(args, dry_run=dry_run)
