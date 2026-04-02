@@ -167,6 +167,11 @@ def load_state(path: str) -> dict:
 
 
 def save_state(path: str, state: dict) -> None:
+    # events 数组无上限会导致 state 文件持续膨胀（已观测到 12289 条 / 5.2MB）。
+    # 写入前保留最近 2000 条，足够追溯约 16 小时的操作历史（30s 间隔 × 10 agent）。
+    MAX_EVENTS = 2000
+    if len(state.get("events", [])) > MAX_EVENTS:
+        state["events"] = state["events"][-MAX_EVENTS:]
     state_path = Path(path)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(state, ensure_ascii=False, indent=2)
@@ -279,9 +284,13 @@ def normalize_answer(text: str) -> str:
     return _shared_crypto.go_normalize(text)
 
 
-def fetch_challenge_pool(bank_source_url: str) -> list[dict]:
-    with request.urlopen(bank_source_url, timeout=20) as resp:
-        content = resp.read().decode("utf-8")
+def fetch_challenge_pool(bank_source_url: str) -> list[dict] | None:
+    try:
+        with request.urlopen(bank_source_url, timeout=20) as resp:
+            content = resp.read().decode("utf-8")
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": f"challenge pool fetch failed: {e}"}, ensure_ascii=False, indent=2))
+        return None
     rows = re.findall(r'\{"([^"]+)",\s*"([a-fA-F0-9]{64})",\s*"([^"]+)"\}', content)
     return [{"question": q, "answer_hash": h.lower(), "category": c} for q, h, c in rows]
 
@@ -1298,14 +1307,38 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
         deadline_block = current_challenge.get("deadline_block", 0)
         window_blocks = int(cfg.get("ai_challenge_window_blocks", 50))
 
+        # Fix4: already_committed/already_revealed 必须与当前 epoch 一致，
+        # 否则上一 epoch 的 tx hash 会导致本 epoch 永久跳过 commit。
+        last_epoch = state["agents"].get(agent, {}).get("last_challenge_epoch", -1)
         last_commit = state["agents"].get(agent, {}).get("last_challenge_commit_tx", "")
-        already_committed = bool(last_commit) and not str(last_commit).startswith("simulate:")
-        already_revealed = not str(state["agents"].get(agent, {}).get("last_challenge_reveal_tx", "")).startswith("simulate:")
+        last_reveal = state["agents"].get(agent, {}).get("last_challenge_reveal_tx", "")
+        already_committed = (
+            last_epoch == epoch
+            and bool(last_commit)
+            and not str(last_commit).startswith("simulate:")
+        )
+        already_revealed = (
+            last_epoch == epoch
+            and bool(last_reveal)
+            and not str(last_reveal).startswith("simulate:")
+        )
+
+        # Fix3: 若 commit 窗口已关闭且本 epoch 尚未 commit，本 epoch 彻底错过，
+        # 明确返回失败，不再写入假 success。
+        if not already_committed and current_block > deadline_block:
+            state["events"].append({
+                "ts": now_ts(), "type": "challenge_missed",
+                "agent": agent, "epoch": epoch, "reason": "commit_window_closed",
+            })
+            save_state(state_file, state)
+            print(json.dumps({"ok": False, "error": "commit window closed, epoch missed",
+                              "agent": agent, "epoch": epoch}, ensure_ascii=False, indent=2))
+            return 1
 
         commit_ok = already_committed
         reveal_ok = already_revealed
         commit_tx_hash = last_commit if already_committed else ""
-        reveal_tx_hash = state["agents"].get(agent, {}).get("last_challenge_reveal_tx", "") if already_revealed else ""
+        reveal_tx_hash = last_reveal if already_revealed else ""
 
         if not already_committed and current_block <= deadline_block:
             ok, tx_hash_or_err = client.submit_commit(agent, epoch, commit_hash)
@@ -1377,6 +1410,9 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
     state["agents"][agent]["last_challenge_at"] = now_ts()
     state["agents"][agent]["last_challenge_result"] = "success"
     state["agents"][agent]["last_challenge_execution_mode"] = cfg.get("execution_mode", "simulate")
+    # Fix4: 记录已成功参与的 epoch，供下次 already_committed 检测使用
+    if cfg.get("execution_mode") == "command":
+        state["agents"][agent]["last_challenge_epoch"] = epoch
     state["events"].append(
         {
             "ts": now_ts(),

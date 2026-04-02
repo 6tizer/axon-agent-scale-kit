@@ -131,16 +131,16 @@ def query_agent_cosmos(bech32_address: str) -> dict | None:
 
 def ensure_axond_key(agent_name: str, private_key_hex: str,
                      keyring_dir: str = "~/.axond",
-                     keyring_backend: str = "file") -> tuple[bool, str]:
+                     keyring_backend: str = "test") -> tuple[bool, str]:
     """
     确保密钥存在于 axond keyring。
     不存在则导入，已存在则跳过。
 
     返回 (success, message)。
     """
-    # 先检查是否已存在
+    # 先检查是否已存在（axond keys show，不是 keys get）
     r, stdout, _ = _run_axond(
-        ["keys", "get", agent_name,
+        ["keys", "show", agent_name,
          "--keyring-dir", str(Path(keyring_dir).expanduser()),
          "--keyring-backend", keyring_backend],
         timeout=10,
@@ -148,14 +148,15 @@ def ensure_axond_key(agent_name: str, private_key_hex: str,
     if r == 0 and agent_name in stdout:
         return True, f"key already exists: {agent_name}"
 
-    # 不存在，尝试导入
-    # 注意：axond keys import 需要密钥的原始 hex（不带 0x 前缀）
+    # 不存在，通过 unsafe-import-eth-key 导入原始以太坊私钥。
+    # axond keys import 期望 keystore 文件路径，无法接受原始 hex；
+    # unsafe-import-eth-key 直接接受 hex 字符串（不带 0x 前缀）。
     pk = private_key_hex.strip()
     if pk.startswith("0x"):
         pk = pk[2:]
 
     r, stdout, stderr = _run_axond(
-        ["keys", "import", agent_name, pk,
+        ["keys", "unsafe-import-eth-key", agent_name, pk,
          "--keyring-dir", str(Path(keyring_dir).expanduser()),
          "--keyring-backend", keyring_backend],
         timeout=20,
