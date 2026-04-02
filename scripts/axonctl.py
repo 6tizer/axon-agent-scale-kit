@@ -22,7 +22,12 @@ import uuid
 from pathlib import Path
 from urllib import request
 
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import yaml
+
+_state_lock = threading.Lock()
 
 logger = logging.getLogger("axonctl")
 if not logger.handlers:
@@ -167,19 +172,36 @@ def load_state(path: str) -> dict:
 
 
 def save_state(path: str, state: dict) -> None:
-    # events 数组无上限会导致 state 文件持续膨胀（已观测到 12289 条 / 5.2MB）。
-    # 写入前保留最近 2000 条，足够追溯约 16 小时的操作历史（30s 间隔 × 10 agent）。
     MAX_EVENTS = 2000
-    if len(state.get("events", [])) > MAX_EVENTS:
-        state["events"] = state["events"][-MAX_EVENTS:]
-    state_path = Path(path)
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(state, ensure_ascii=False, indent=2)
-    # 原子写入：先写临时文件，再 rename 到目标路径。
-    # rename 在 POSIX 下是原子的（同一文件系统保证），进程崩溃不会留下半写文件。
-    tmp = state_path.with_suffix(".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, state_path)
+    with _state_lock:
+        state_path = Path(path)
+        # 并发场景：先读磁盘最新版本，再 merge，避免多线程互相覆盖对方的 agent 更新。
+        try:
+            disk = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception:
+            disk = {}
+
+        # agents：磁盘已有的为底，本线程更新的覆盖（各线程只写自己的 agent slot）
+        merged_agents = {**disk.get("agents", {}), **state.get("agents", {})}
+
+        # events：磁盘已有的 + 本线程新增的（以 JSON 指纹去重，防止重启后重复追加）
+        disk_fps = {json.dumps(e, sort_keys=True) for e in disk.get("events", [])}
+        new_events = [e for e in state.get("events", [])
+                      if json.dumps(e, sort_keys=True) not in disk_fps]
+        merged_events = disk.get("events", []) + new_events
+        if len(merged_events) > MAX_EVENTS:
+            merged_events = merged_events[-MAX_EVENTS:]
+
+        # 其他顶层 key：磁盘为底，本线程内容覆盖
+        merged = {**disk, **{k: v for k, v in state.items() if k not in ("agents", "events")}}
+        merged["agents"] = merged_agents
+        merged["events"] = merged_events
+
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = state_path.with_suffix(".tmp")
+        # 原子写入：rename 在 POSIX 下是原子的，进程崩溃不会留下半写文件。
+        tmp.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, state_path)
 
 
 def rpc_chain_id(rpc_url: str, timeout_sec: int = 5) -> tuple[bool, int | None, str | None]:
@@ -1471,12 +1493,20 @@ def challenge_batch(state_file: str, network: str, request_id: str | None) -> in
         return 1
     passed = []
     failed = []
-    for name in targets:
-        code = challenge_run_once(state_file, network, name)
-        if code == 0:
-            passed.append(name)
-        else:
-            failed.append(name)
+    with ThreadPoolExecutor(max_workers=min(len(targets), 20)) as pool:
+        futures = {pool.submit(challenge_run_once, state_file, network, name): name
+                   for name in targets}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                code = future.result()
+            except Exception as exc:
+                logger.error("challenge_run_once raised for %s: %s", name, exc)
+                code = 1
+            if code == 0:
+                passed.append(name)
+            else:
+                failed.append(name)
     print(
         json.dumps(
             {"ok": len(failed) == 0, "target_count": len(targets), "passed_count": len(passed), "failed_count": len(failed), "passed": passed, "failed": failed},
