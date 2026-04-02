@@ -20,14 +20,22 @@ heartbeat:
 cosmos:
   # chain_id 与顶层的 cosmos_chain_id 一致
   chain_id: "axon_8210-1"
-  # Axon 自定义广播 API（axond tx 底层调用此端点）
+  # Axon 自定义广播 API（用于 wait_for_tx 轮询确认）
   rest_url: "https://mainnet-api.axonchain.ai"
+  # CometBFT RPC 端点（axond tx 命令通过此端点广播 Cosmos 交易）
+  # 必须填公共节点；若留空则 axond 默认连 localhost:26657，
+  # 本地节点未同步时会返回 -32603 Internal 错误。
+  cometbft_rpc_url: "https://mainnet-cometbft.axonchain.ai/"
   # axond 密钥环目录（容器内的 keyring-test 通过 docker cp 复制到 ubuntu 可访问的位置）
   keyring_dir: "/home/ubuntu/.axond"
   # keyring backend：必须与 keys import 时一致（test）
   keyring_backend: "test"
   # 广播模式：sync（推荐）/ async / block
   broadcast_mode: "sync"
+  # 链上最低 gas fee（`axond tx` --fees 参数）
+  # 不传时链以 insufficient_fee 拒绝交易
+  # 计算依据：链上 min_fee = 200000000000000aaxon ≈ 0.0002 AXON，留 50% 余量
+  fees: "300000000000000aaxon"
 # ─── challenge 配置 ───────────────────────────────────────────────────────────
 challenge:
   enabled: true
