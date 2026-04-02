@@ -1311,6 +1311,7 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
         # 否则上一 epoch 的 tx hash 会导致本 epoch 永久跳过 commit。
         last_epoch = state["agents"].get(agent, {}).get("last_challenge_epoch", -1)
         last_commit = state["agents"].get(agent, {}).get("last_challenge_commit_tx", "")
+        last_reveal = state["agents"].get(agent, {}).get("last_challenge_reveal_tx", "")
         already_committed = (
             last_epoch == epoch
             and bool(last_commit)
@@ -1318,7 +1319,8 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
         )
         already_revealed = (
             last_epoch == epoch
-            and not str(state["agents"].get(agent, {}).get("last_challenge_reveal_tx", "")).startswith("simulate:")
+            and bool(last_reveal)
+            and not str(last_reveal).startswith("simulate:")
         )
 
         # Fix3: 若 commit 窗口已关闭且本 epoch 尚未 commit，本 epoch 彻底错过，
@@ -1336,7 +1338,7 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
         commit_ok = already_committed
         reveal_ok = already_revealed
         commit_tx_hash = last_commit if already_committed else ""
-        reveal_tx_hash = state["agents"].get(agent, {}).get("last_challenge_reveal_tx", "") if already_revealed else ""
+        reveal_tx_hash = last_reveal if already_revealed else ""
 
         if not already_committed and current_block <= deadline_block:
             ok, tx_hash_or_err = client.submit_commit(agent, epoch, commit_hash)
