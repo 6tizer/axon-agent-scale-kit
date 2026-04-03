@@ -168,7 +168,7 @@ function StatusIcon({
   error?: string;
 }) {
   if (type === "challenge_error" || error) {
-    return <XCircle className="h-4 w-4 text-red-400" title={error} />;
+    return <span title={error}><XCircle className="h-4 w-4 text-red-400" /></span>;
   }
   if (ok === false) {
     return <XCircle className="h-4 w-4 text-red-400" />;
