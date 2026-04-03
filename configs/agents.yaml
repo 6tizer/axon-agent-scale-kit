@@ -49,3 +49,4 @@ agents:
     heartbeat_interval_sec: 30
     auto_register: true
     auto_stake: true
+    is_validator: true  # only this agent is a staking validator; can submit challenge TXs
