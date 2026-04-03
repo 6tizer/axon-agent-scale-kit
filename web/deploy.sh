@@ -17,6 +17,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_DIR="$REPO_ROOT/web"
 FRONTEND_DIR="$WEB_DIR/frontend"
 BACKEND_DIR="$WEB_DIR/backend"
+# Keep the venv at a path reachable via `current` so the systemd unit finds it
+# after each release deploy.
 VENV_DIR="$WEB_DIR/.venv"
 
 echo "=== Axon Dashboard Deploy ==="

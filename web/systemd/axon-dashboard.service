@@ -7,12 +7,12 @@ After=network.target
 Type=simple
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/axon-agent-scale/web/backend
+WorkingDirectory=/home/ubuntu/axon-agent-scale/current/web/backend
 
 # Python from project venv if present, otherwise system python3
 ExecStart=/bin/bash -c '\
-  if [ -f /home/ubuntu/axon-agent-scale/web/.venv/bin/python ]; then \
-    PYTHON=/home/ubuntu/axon-agent-scale/web/.venv/bin/python; \
+  if [ -f /home/ubuntu/axon-agent-scale/current/web/.venv/bin/python ]; then \
+    PYTHON=/home/ubuntu/axon-agent-scale/current/web/.venv/bin/python; \
   else \
     PYTHON=python3; \
   fi; \
