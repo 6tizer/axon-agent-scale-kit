@@ -1127,11 +1127,18 @@ def challenge_gate_check(state_file: str, network: str, agent: str) -> int:
         print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
         return 1
     agent_state = state.get("agents", {}).get(agent, {})
+    # Derive validator eligibility from the challenge_agents whitelist when configured;
+    # fall back to the legacy per-agent state flag only when no whitelist is present.
+    eligible_agents = cfg.get("challenge_agents", [])
+    if eligible_agents:
+        _validator_active = agent in eligible_agents
+    else:
+        _validator_active = bool(agent_state.get("validator_active", False))
     checks = {
         "registered": bool(agent_state.get("registered")),
         "not_suspended": not bool(agent_state.get("suspended", False)),
         "validator_required": bool(cfg.get("validator_required", True)),
-        "validator_active": bool(agent_state.get("validator_active", False)),
+        "validator_active": _validator_active,
         "window_open": False,
         "phase": "unknown",
     }
