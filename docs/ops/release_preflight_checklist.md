@@ -19,11 +19,16 @@
 1. 优先执行统一脚本：`scripts/release_deploy_verify.sh`。
 2. 若需手工执行：`git push` 到 GitHub（确保可追溯）。
 3. 服务器同步到该 commit（不要跨版本复制脚本）。
-4. 重启守护：`sudo systemctl restart axon-heartbeat-daemon.service`。
+4. 重启守护：
+   ```bash
+   sudo systemctl restart axon-heartbeat-daemon.service
+   sudo systemctl restart axon-compound-daemon.service
+   ```
 
 ## 3. 服务器验收（必须）
 
 - `systemctl is-active axon-heartbeat-daemon.service` 为 `active`。
+- `systemctl is-active axon-compound-daemon.service` 为 `active`。
 - `docker ps` 中目标 agent 容器均在运行。
 - 执行 lifecycle：
 

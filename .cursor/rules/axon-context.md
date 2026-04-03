@@ -20,6 +20,7 @@ These files are the **source of truth**. Do not rely on memory or assumptions ab
 - **Server:** `ubuntu@43.165.195.71`, workdir `/home/ubuntu/axon-agent-scale`
 - **Protected branch:** `main` (never push directly; all changes via PR)
 - **Managed agents:** `agent-001`–`agent-005`, `agent-legacy-006`–`agent-legacy-008`, `agent-009`, `qqclaw-validator`（共 10 个，全部 registered=true, staked=true）
+- **Active daemons:** `axon-heartbeat-daemon.service`（心跳）、`axon-compound-daemon.service`（自动复投 addStake，每 2 小时一轮，配置见 `configs/compound.yaml`）
 - **AI Challenge 资格：** 协议层面只有 validator 地址才能提交 challenge TX（`isActiveValidatorAddress`，`code=1120`）。当前唯一有资格的 agent 是 `qqclaw-validator`；`agent-001`～`agent-009` 永久无资格，challenge daemon 已通过 `challenge_agents` 白名单跳过它们。详见 `docs/ops/roadmap.md` 第六节。
 - **State source:** `state/deploy_state.json` 已与服务器同步（block 164901 心跳），所有 agent 链上在线
 - **qqclaw-validator 特殊情况：** 由 `axon-heartbeat-daemon.service` 统一发心跳，无独立 Docker 容器，`service_active` 由 heartbeat-batch 自动维护

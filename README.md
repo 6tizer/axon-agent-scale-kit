@@ -15,6 +15,7 @@ Production-oriented automation for funded scaling, remote deployment, heartbeat,
 - AI challenge flow with gate checks, local answer bank, and batch execution
 - Lifecycle reporting with health grading and repair actions
 - Wallet governance with masked export, secure backup export, and backup verification
+- Auto-compound daemon that reinvests accumulated rewards back into stake (`scripts/compound.py`)
 - Built-in GitHub Actions unittest workflow for regression checks
 
 ## 10-Line Quick Start
@@ -59,6 +60,8 @@ python scripts/axonctl.py lifecycle-report --network configs/network.yaml --requ
 
 All agents are managed by the `axon-heartbeat-daemon.service` via `scripts/axonctl.py heartbeat-daemon`.
 The daemon automatically traverses all agent entries in `state/deploy_state.json` — no per-agent configuration is needed when adding new agents.
+
+The `axon-compound-daemon.service` (via `scripts/compound.py daemon`) runs alongside the heartbeat daemon and automatically reinvests each agent's free balance back into stake every epoch. It reads the same `deploy_state.json` and `configs/` files, requires no per-agent wiring, and supports dry-run mode.
 
 **Managed agents:**
 
@@ -317,8 +320,11 @@ python scripts/axonctl.py validate \
 ## Layout
 
 - `configs/`: network and agent declaration files
+- `configs/compound.yaml`: auto-compound daemon parameters (min amount, reserve, interval, gas cap, dry_run)
 - `configs/recovery/`: recovery import templates (safe to version)
 - `scripts/`: CLI and execution scripts
+- `scripts/compound.py`: auto-compound daemon — queries balances, calculates ROI, submits `addStake` TXs
+- `scripts/systemd/axon-compound-daemon.service`: systemd unit for the compound daemon
 - `scripts/archive/`: historical one-off scripts (not part of active workflow)
 - `templates/archive/`: historical systemd template artifacts
 - `state/`: local state data (contains private keys — keep it safe)

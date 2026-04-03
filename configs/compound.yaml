@@ -1,0 +1,41 @@
+# configs/compound.yaml — Axon Agent 自动复投配置
+#
+# 由 scripts/compound.py daemon 读取。
+# 所有字段均有默认值，仅需覆盖不同于默认的字段。
+#
+# 收益机制快速参考（来自 x/agent/keeper/ 源码）：
+#   Validator Pool (55%): 按 MiningPower = stake^0.5 × repScore 分配
+#                         仅 active bonded validator 参与
+#   Reputation Pool(25%): 按 RepScore = 1 + 1.5×ln(1+rep)/ln(101) 分配
+#                         所有非 suspended agent 参与，质押无影响
+#   Contribution (35%):   score 不含质押，但 cap ∝ stake（质押更多→上限更高）
+#   Legacy Epoch:         weight = stake × (100+repBonus+aiBonus)，质押线性影响
+
+compound:
+  # ── 触发条件 ──────────────────────────────────────────────────────────
+  # 每 agent 可用余额（扣除 reserve 后）超过此值才执行复投（AXON）
+  min_compound_axon: 5.0
+
+  # 每 agent 保留的最小余额（gas 缓冲），不参与复投（AXON）
+  reserve_axon: 1.0
+
+  # ── 限额 ──────────────────────────────────────────────────────────────
+  # 单次 compound 单个 agent 最大复投量（防止大额单次 TX）（AXON）
+  max_compound_per_run_axon: 200.0
+
+  # ── 运行频率 ───────────────────────────────────────────────────────────
+  # daemon 两次 compound 之间的间隔（秒）
+  # 默认 3600 = 1 小时。考虑到 gas 成本，不建议低于 1800（30分钟）
+  interval_sec: 3600
+
+  # ── Gas 配置 ───────────────────────────────────────────────────────────
+  # 最大接受的 gas 价格（gwei）；与 network.yaml gas.max_gwei 保持一致
+  max_gas_gwei: 30
+
+  # addStake TX 等待 receipt 超时（秒）
+  receipt_timeout_sec: 120
+
+  # ── 安全开关 ───────────────────────────────────────────────────────────
+  # dry_run: true = 只计算计划，不发 TX（用于验证配置）
+  # 生产环境设置为 false
+  dry_run: false
