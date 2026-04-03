@@ -115,4 +115,5 @@ VALIDATOR_AGENT_NAME = "qqclaw-validator"
 # Daemon service names
 DAEMON_HEARTBEAT = "axon-heartbeat-daemon.service"
 DAEMON_CHALLENGE = "axon-challenge-daemon.service"
-ALLOWED_DAEMONS = {DAEMON_HEARTBEAT, DAEMON_CHALLENGE}
+DAEMON_COMPOUND = "axon-compound-daemon.service"
+ALLOWED_DAEMONS = {DAEMON_HEARTBEAT, DAEMON_CHALLENGE, DAEMON_COMPOUND}

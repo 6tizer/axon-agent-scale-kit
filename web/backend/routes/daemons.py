@@ -13,7 +13,7 @@ import config as cfg
 
 router = APIRouter(tags=["daemons"])
 
-_DAEMONS = [cfg.DAEMON_HEARTBEAT, cfg.DAEMON_CHALLENGE]
+_DAEMONS = [cfg.DAEMON_HEARTBEAT, cfg.DAEMON_CHALLENGE, cfg.DAEMON_COMPOUND]
 
 
 def _systemctl_is_active(service: str) -> str:
