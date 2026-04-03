@@ -23,6 +23,9 @@ ExecStart=/bin/bash -c '\
 #   openssl rand -hex 32
 Environment=AXON_API_TOKEN=<your-token-here>
 
+# State file is outside the release directory (stable across deploys)
+Environment=AXON_STATE_FILE=/home/ubuntu/axon-agent-scale/state/deploy_state.json
+
 # ── Required in production: restrict CORS to your Cloudflare Tunnel domain ─────
 # Replace the example URL with your actual tunnel domain.
 # Multiple origins: comma-separated, no spaces.

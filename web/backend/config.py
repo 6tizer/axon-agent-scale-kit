@@ -22,7 +22,11 @@ PROJECT_ROOT = (_HERE / ".." / "..").resolve()
 
 NETWORK_YAML = PROJECT_ROOT / "configs" / "network.yaml"
 AGENTS_YAML = PROJECT_ROOT / "configs" / "agents.yaml"
-STATE_FILE = PROJECT_ROOT / "state" / "deploy_state.json"
+# The state file lives OUTSIDE the release directory (persists across deploys).
+# Allow override via env var; default to the well-known stable path on the server.
+_STATE_FILE_DEFAULT = PROJECT_ROOT / "state" / "deploy_state.json"
+_STATE_FILE_ENV = os.environ.get("AXON_STATE_FILE")
+STATE_FILE = Path(_STATE_FILE_ENV) if _STATE_FILE_ENV else _STATE_FILE_DEFAULT
 LOCAL_ENV_MD = PROJECT_ROOT / "configs" / "runtime" / "local_env.md"
 
 
