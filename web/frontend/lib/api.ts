@@ -60,13 +60,13 @@ export class ApiError extends Error {
 // ── SWR fetcher ────────────────────────────────────────────────────────────────
 // Strip the API_BASE prefix from SWR cache keys before passing to apiFetch,
 // so keys like "/api/agents" work regardless of what API_BASE is set to.
-export const swrFetcher = (url: string) => {
+export const swrFetcher = <T = unknown>(url: string): Promise<T> => {
   const path = url.startsWith(API_BASE)
     ? url.slice(API_BASE.length)
     : url.startsWith("/api")
     ? url.slice(4)
     : url;
-  return apiFetch(path);
+  return apiFetch<T>(path);
 };
 
 // ── Typed request helpers ──────────────────────────────────────────────────────
