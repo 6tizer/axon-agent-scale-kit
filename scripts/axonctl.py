@@ -1491,6 +1491,19 @@ def challenge_batch(state_file: str, network: str, request_id: str | None) -> in
     if not targets:
         print(json.dumps({"ok": False, "error": "no agents for challenge batch"}, ensure_ascii=False, indent=2))
         return 1
+    # Filter to challenge-eligible agents only (protocol requires bonded validator; non-validators
+    # always fail with code=1120; whitelist is configured via challenge.challenge_agents in network.yaml)
+    network_cfg = load_yaml(network)
+    cfg = challenge_settings(network_cfg)
+    eligible = cfg.get("challenge_agents", [])
+    if eligible:
+        skipped = [t for t in targets if t not in eligible]
+        targets = [t for t in targets if t in eligible]
+        if skipped:
+            logger.info("challenge_batch: skipped non-validator agents (not in challenge_agents whitelist): %s", skipped)
+    if not targets:
+        print(json.dumps({"ok": False, "error": "no challenge-eligible agents after whitelist filter"}, ensure_ascii=False, indent=2))
+        return 1
     passed = []
     failed = []
     with ThreadPoolExecutor(max_workers=min(len(targets), 20)) as pool:
