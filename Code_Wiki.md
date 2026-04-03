@@ -12,10 +12,11 @@ AXON Agent Scale Kit 是一个 CLI 优先的运维工具集，专为在 AXON 协
 ## 2. 主要模块职责 (Main Module Responsibilities)
 
 - **`scripts/axonctl.py`**：CLI 主入口文件。负责解析超过 30+ 种子命令，涵盖从钱包管理、配置校验、Scale 意图解析 (`run-intent`)、链上注册 (`register-onchain-once/batch`)、远程部署 (`remote-deploy`) 到生命周期报告和修复 (`lifecycle-report/repair`) 的所有核心运维逻辑。
+- **`scripts/compound.py`**：自动复投守护进程。扫描所有 agent 的链上余额和质押信息，基于 ROI 计算决策是否将奖励复投回质押（`addStake` 交易）。支持 `status`（只查询不发 TX）、`run`（单次执行）、`daemon`（持续循环）、`roi`（离线 ROI 计算）、`predict-rep`（声誉路径预测）五个子命令。依赖 `web3` 库（生产服务器已安装）。
 - **`scripts/axond_tx.py`**：`axond` CLI 子进程封装模块。专门用于处理需要 Cosmos SDK 签名的交易，特别是 AI Challenge 的 Commit (`MsgSubmitAIChallengeResponse`) 和 Reveal (`MsgRevealAIChallengeResponse`)，并支持 EVM 地址到 Cosmos Bech32 地址的转换。
 - **`scripts/_shared_crypto.py`**：共享密码学工具模块。实现与 AXON 链上 Keeper 完全一致的 Hash 算法（如 `keeper_commit_hash`）以及字符串的 Normalize 逻辑，避免链上链下数据验证不一致。
 - **`scripts/release_deploy_verify.sh`**：一键发布与部署脚本。集成了本地回归测试、Push 代码、远程服务器部署以及服务重启与状态验证的 CI/CD 流程。
-- **`configs/`**：配置目录。包含全局的网络配置 `network.yaml`（RPC、Gas、心跳及 Challenge 规则）和 Agent 声明文件 `agents.yaml`。实际运行时推荐使用不被 Git 追踪的 `configs/runtime/*.yaml`。
+- **`configs/`**：配置目录。包含全局的网络配置 `network.yaml`（RPC、Gas、心跳及 Challenge 规则）、Agent 声明文件 `agents.yaml`，以及复投守护进程配置 `compound.yaml`（最小复投量、保留量、最大单次复投量、间隔、Gas 上限）。实际运行时推荐使用不被 Git 追踪的 `configs/runtime/*.yaml`。
 - **`state/`**：运行时状态目录。核心文件为 `deploy_state.json`，其中保存了敏感的钱包私钥和动态生成的伸缩计划与证据，绝对禁止提交到版本控制中。
 - **`docs/`**：项目文档。包含核心的开发者参考 `DEVELOPER_REFERENCE.md` 以及协作流程规范 `ops/collaboration_workflow.md`。
 
@@ -48,6 +49,9 @@ AXON Agent Scale Kit 是一个 CLI 优先的运维工具集，专为在 AXON 协
 ### 核心 Python 包 (`requirements.txt`)
 - `PyYAML==6.0.2`: 解析 `network.yaml` 与 `agents.yaml`。
 - `eth-account==0.13.3`: 用于在本地生成真实的 Funding 钱包和 Agent 钱包私钥。
+
+### 可选依赖（生产服务器已安装，本地开发可选）
+- `web3`: `compound.py` 用于查询链上余额/质押/声誉，以及构造和发送 `addStake` EVM 交易。未安装时 `compound.py status` 会在所有 agent 返回 `"reason": "web3 not installed"`。
 
 ### 外部二进制与服务依赖
 - **`axond` 二进制**: AXON 官方节点程序。依赖其进行离线密钥管理（`axond keys import`）和交易签名广播。
@@ -114,6 +118,30 @@ python scripts/axonctl.py heartbeat-batch --network configs/network.yaml --reque
 # 参与 AI Challenge
 python scripts/axonctl.py challenge-batch --network configs/network.yaml --request-id <request_id>
 ```
+
+### 5.6 自动复投（Auto-Compound）
+查询所有 agent 状态并决策复投计划（不发 TX）：
+```bash
+python3 scripts/compound.py status \
+  --state state/deploy_state.json \
+  --network configs/network.yaml \
+  --agents configs/agents.yaml
+
+# 单次执行复投（实际发 TX）
+python3 scripts/compound.py run \
+  --state state/deploy_state.json \
+  --network configs/network.yaml \
+  --agents configs/agents.yaml \
+  --config configs/compound.yaml
+
+# 离线 ROI 计算（无需连链）
+python3 scripts/compound.py roi --stake 8591 --add 50 --rep 50 --validator
+
+# 声誉增长路径预测
+python3 scripts/compound.py predict-rep --l1 20 --epochs 30
+```
+
+持续运行守护进程请使用 `scripts/systemd/axon-compound-daemon.service`（部署步骤见 `docs/ops/roadmap.md §十一.4`）。
 
 ## 6. 协作开发规范 (Collaboration Workflow)
 - **Fork + PR 模式**：协作者必须将仓库 Fork 到自己的 GitHub，所有功能开发必须通过提交 Pull Request 到主仓库 (`6tizer/axon-agent-scale-kit`) 的 `main` 分支。

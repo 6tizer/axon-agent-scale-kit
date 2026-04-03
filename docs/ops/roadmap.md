@@ -1,6 +1,6 @@
 # Axon 运维路线图 & 架构备忘
 
-> 最后更新：2026-04-03（§八 收益机制完整调研 + §九 改进行动计划）
+> 最后更新：2026-04-04（§十 源码二次核验 + §十一 复投策略实施方案）
 > 记录本次会话中确认的架构事实、待办事项和决策依据，供后续 Agent 或操作者参考。
 
 ---
@@ -416,4 +416,249 @@ ps aux | grep axond | grep -v grep | grep -v bash | awk '{print "RSS:", $6/1024"
 
 # challenge 日志
 journalctl -u axon-challenge-daemon.service -n 30 --no-pager | grep -E 'commit|reveal|epoch|ok|error'
+
+# compound 日志
+journalctl -u axon-compound-daemon.service -n 30 --no-pager | grep -E 'compound|stake|balance|error'
+
+# compound 状态检查（不发 TX）
+python3 scripts/compound.py status \
+  --state state/deploy_state.json \
+  --network configs/network.yaml \
+  --agents configs/agents.yaml
+
+# 声誉路径预测（普通 agent，从 L1=20 开始，30 epochs）
+python3 scripts/compound.py predict-rep --l1 20 --epochs 30
+
+# 声誉路径预测（qqclaw-validator，AI challenge 前 20%）
+python3 scripts/compound.py predict-rep --l1 20 --validator --challenge-top20 --epochs 30
+
+# 追加质押收益计算（例：当前 100 AXON，追加 50 AXON，rep=50，validator）
+python3 scripts/compound.py roi --stake 100 --add 50 --rep 50 --validator
 ```
+
+---
+
+## 十、源码二次核验报告（2026-04-04 完整阅读）
+
+> 本节基于对 `axon-chain/axon` 仓库以下文件的直接阅读：
+> `block_rewards.go`, `contribution.go`, `l1_reputation.go`, `mining_power.go`,
+> `rewards.go`, `reputation.go`, `abci.go`, `keeper.go`, `msg_server.go`
+> 以下为精确事实，**标注了与 §八 的差异**。
+
+### 10.1 区块奖励分配（block_rewards.go 精确实现）
+
+```
+每块铸造量（Year 1-4）：12.367 AXON/block（BaseBlockRewardStr = 12367×10^15 aaxon）
+总上限：650M AXON（MaxBlockRewardSupplyStr，§8.2 一致）
+
+分配比例（常量）：
+  ProposerSharePercent    = 20%   → 每块立即发给 block proposer
+  ValidatorPoolSharePercent = 55% → 累积，每 epoch 结算
+  ReputationPoolSharePercent = 25% → 累积，每 epoch 结算
+```
+
+**与 §八 的差异**：`distributeReputationRewards` 使用 `calcReputationScoreMillis`，
+该函数用同一 log 公式（不含质押），所有非 suspended agent 参与，**不分 validator/non-validator**。
+
+### 10.2 声誉双层系统精确常量（l1_reputation.go）
+
+```go
+// L1 每 epoch 精确 millis 变化：
+scoreSignRateHigh   = +1000  // validator 签块率 > 95%
+scoreSignRateMedium = +500   // validator 签块率 80-95%
+scoreHeartbeatActive = +300  // 本 epoch 至少 1 次 heartbeat
+scoreOnChainActive  = +500   // 本 epoch activity >= 10 txs
+scoreContractUsage  = +500   // 已部署合约被 >= 5 个地址调用
+scoreAIChallengeTop = +2000  // AI 挑战前 20%
+scoreAIChallengeGood = +1000 // AI 挑战前 50%（但未进前 20%）
+scoreAIChallengePoor = -1000 // AI 挑战后 20% 或作弊
+scoreOfflineImm     = -5000  // agent 掉线（立即）
+scoreDoubleSignImm  = -40000 // 双签 → L1 归零
+
+decayL1Millis = -100   // -0.1/epoch
+decayL2Millis = -50    // -0.05/epoch
+
+L1MaxMilliscore = 40_000  // L1 上限 40.0
+L2MaxMilliscore = 30_000  // L2 上限 30.0
+TotalMaxRep     = 100_000 // total 上限 100.0
+```
+
+### 10.3 ⚠️ 关键 Bug：validator 签块率 bonus 实际无法获得
+
+`getValidatorSignRate` 的实际代码（l1_reputation.go）：
+
+```go
+rate := int64(activity) * 100 / int64(epochLength)
+```
+
+其中 `activity` = 本 epoch 发送的 TX 数（heartbeat + challenge），`epochLength` 单位为 **blocks**。
+
+**问题**：若 epoch = 1000 blocks，heartbeat 每 100 blocks 发一次 → activity ≈ 10：
+```
+rate = 10 * 100 / 1000 = 1%  →  远低于 80% 阈值
+```
+
+**结论**：当前实现中，validator 签块率 bonus（+0.5 或 +1.0 L1/epoch）在任何合理 heartbeat 间隔下**实际无法触发**。代码注释本身承认："A full implementation would track per-block LastCommitInfo.Votes in BeginBlocker. For now, use heartbeat count as proxy."
+
+**影响**：qqclaw-validator 每 epoch 实际可获 L1 增量：
+```
++0.3（heartbeat）+ 0.5（≥10 txs）+ 2.0（AI 挑战前 20%）- 0.1（decay）= +2.7 L1/epoch
+（签块率 bonus +0.5/+1.0 无法获得，§八 预测有误）
+```
+
+### 10.4 贡献奖励精确实现（contribution.go）
+
+**年度发行量（非等比减半，而是分档）**：
+
+| 年份 | 年发行量 |
+|------|---------|
+| Year 1-4 | 35M AXON/年 |
+| Year 5-8 | 25M AXON/年 |
+| Year 9-12 | 15M AXON/年 |
+| Year 12+ | 5M AXON/年（直到 350M 上限） |
+
+**贡献分计算精确公式（calculateContributionScore）**：
+```
+score = deploys  × 50              # 部署合约次数（上限 10000）
+      + calls    × 30              # 合约被外部调用次数（上限 10000）
+      + min(activity, 100) × 10   # 本 epoch TX 数（上限 100）
+      + max(rep - 70, 0) × 10     # rep > 70 的超额部分（weight=10/点）
+      + 5                          # 在线 bonus（is_online）
+```
+
+**资格过滤（实际代码）**：
+1. `agent.Reputation >= 20`（MinReputationForReward）
+2. `blockHeight - registeredAt >= 120960`（约 7 天）
+3. 质押 > 0
+
+**质押 cap 精确公式（contributionRewardCap）**：
+```
+maxReward = pool × capBps × agentStake / 10000 / totalEligibleStake
+```
+`capBps` 默认 200（即 2%），可由 governance 调整。
+**质押增加 → cap 线性增加 → 可接收更多贡献奖励**。
+
+### 10.5 矿力公式（mining_power.go 确认）
+
+```go
+// alpha = 0.5, beta = 1.5, rMax = 100（均从 governance params 读取，可调）
+MiningPower = stake^0.5 × (1 + 1.5 × ln(1+rep) / ln(101))
+```
+
+**当前实现用途**：
+1. `distributeValidatorRewards`（55% pool）：按 MiningPower 权重分配（仅 active validator agents）
+2. `ComputeAllMiningPowers` 结果存入 KV，供 CometBFT validator updates 使用
+
+### 10.6 旧版 epoch rewards（rewards.go）
+
+```
+weight = stake × (100 + repBonus + aiBonus)
+repBonus: rep≥90→20, rep≥70→15, rep≥50→10, rep≥30→5（百分点）
+aiBonus:  由 SetAIBonus 设置（challenge 评分后写入）
+```
+
+这套 `DistributeEpochRewards` 与贡献奖励**分属两个独立的 pool**：
+- `RewardPool`（legacy）：来自外部 protocol 划拨（非 block minting）
+- `ContributionPool`：每块 mint，35M/年
+
+---
+
+## 十一、复投策略实施方案（2026-04-04）
+
+### 11.1 收益流 × 质押影响矩阵（精确版）
+
+| 收益流 | 质押影响 | 机制 |
+|--------|---------|------|
+| Reputation Pool (25% block) | **无影响** | 仅按 RepScore 权重 |
+| Validator Pool (55% block) | √ 开方关系 | MiningPower = stake^0.5 × repScore |
+| Contribution rewards (35% of 1B) | √ 线性上限 | cap ∝ stake（质押更多，上限更高） |
+| Legacy epoch rewards | √ 线性 | weight = stake × multiplier |
+
+**关键结论**：对非 validator agents，声誉比质押重要得多（声誉决定 Reputation Pool 份额，而 Reputation Pool 是最主要的被动收益流）。
+
+### 11.2 qqclaw-validator 复投策略
+
+**优先级排序**（由高到低）：
+
+1. **维持 BONDED 不 jail**（极高影响）：丢失 Validator Pool + AI 挑战资格
+2. **AI 挑战正确率 100%**（高影响）：+2.0 L1/epoch → rep 快速爬升 → repScore 提升
+3. **确保每 epoch ≥10 txs**（中影响）：+0.5 L1/epoch（+heartbeat +0.3 共 +0.8）
+4. **复投奖励到质押**（中影响）：
+   - 提升 Validator Pool 份额（stake^0.5，递减）
+   - 提升 Contribution rewards cap（线性）
+   - 提升 legacy rewards weight（线性）
+
+**复投时机**：账户余额 > reserve(1 AXON) + min_compound(5 AXON) 时，自动执行 `addStake`
+
+**矿力增益示例**（当前质押约 8591 AXON，rep=50）：
+
+```
+MiningPower_before = 8591^0.5 × (1 + 1.5×ln(51)/ln(101)) ≈ 92.7 × 2.07 ≈ 191.9
+追加 100 AXON → 8691^0.5 × 2.07 ≈ 93.2 × 2.07 ≈ 192.9  (+0.5%)
+追加 500 AXON → 9091^0.5 × 2.07 ≈ 95.3 × 2.07 ≈ 197.3  (+2.8%)
+```
+
+> **建议频率**：每 epoch 奖励结算后执行，每次至少 50 AXON 才值得 gas 成本。
+
+### 11.3 agent-001 ~ agent-009 复投策略
+
+**优先级排序**：
+
+1. **保持 ONLINE**（极高影响）：掉线 -5.0 L1，且无法参与 Reputation Pool
+2. **确保每 epoch ≥10 txs（heartbeat）**（中影响）：+0.5 L1/epoch
+3. **声誉爬升到 70+**（高影响）：repScore 在 rep=70 时达 ×2.28，Reputation Pool 份额更大
+4. **复投奖励到质押**（低影响）：
+   - 声誉 Pool（25%）不受质押影响（浪费在此）
+   - 只对贡献奖励 cap 和 legacy rewards 有线性提升
+   - **建议：先确保声誉稳定增长，多余资金再复投**
+
+**声誉爬升预测**（从 L1=0 开始，有 heartbeat+10txs）：
+
+```
+每 epoch 净增：+0.3 + 0.5 - 0.1 = +0.7 L1/epoch
+
+到达 L1=20（贡献奖励资格）：20/0.7 ≈ 29 epochs
+到达 L1=50：50/0.7 ≈ 71 epochs
+到达 L1=70：70/0.7 ≈ 100 epochs
+```
+
+> 🔍 使用 `python3 scripts/compound.py predict-rep --l1 <current> --epochs 50` 查看个人化预测。
+
+### 11.4 compound daemon 部署步骤
+
+```bash
+# 1. 上传 compound.py 和 axon-compound-daemon.service 到服务器
+scp scripts/compound.py ubuntu@43.165.195.71:/home/ubuntu/axon-agent-scale/scripts/
+scp scripts/systemd/axon-compound-daemon.service ubuntu@43.165.195.71:/tmp/
+scp configs/compound.yaml ubuntu@43.165.195.71:/home/ubuntu/axon-agent-scale/current/configs/
+
+# 2. 安装 systemd 服务
+ssh ubuntu@43.165.195.71 "sudo cp /tmp/axon-compound-daemon.service /etc/systemd/system/ && \
+    sudo systemctl daemon-reload && \
+    sudo systemctl enable axon-compound-daemon.service"
+
+# 3. 首次运行 dry-run 验证配置
+ssh ubuntu@43.165.195.71 "python3 /home/ubuntu/axon-agent-scale/scripts/compound.py status \
+    --state /home/ubuntu/axon-agent-scale/state/deploy_state.json \
+    --network /home/ubuntu/axon-agent-scale/current/configs/network.yaml \
+    --agents /home/ubuntu/axon-agent-scale/current/configs/agents.yaml"
+
+# 4. 确认无误后启动
+ssh ubuntu@43.165.195.71 "sudo systemctl start axon-compound-daemon.service"
+
+# 5. 查看日志
+ssh ubuntu@43.165.195.71 "journalctl -u axon-compound-daemon.service -f"
+```
+
+### 11.5 可主动提升收益的操作汇总
+
+| 操作 | 效果 | 适用对象 | 状态 |
+|------|------|---------|------|
+| 维持 heartbeat 不中断 | 保持 ONLINE + +0.3 L1/epoch | 全部 agents | ✅ daemon 运行中 |
+| 确保每 epoch ≥10 txs | +0.5 L1/epoch（MinTxsForActive=10） | 全部 agents | ✅ interval_blocks=100 满足 |
+| AI 挑战正确率 100% | +2.0 L1/epoch + aiBonus | qqclaw-validator | ✅ 109/110 已完成 |
+| CAP theorem 答案补全 | 覆盖最后 1 道题 | qqclaw-validator | ❓ 待解 |
+| validator 不 jail | 保住 Validator Pool + 挑战资格 | qqclaw-validator | ✅ 监控中 |
+| 自动复投奖励到质押 | Contribution cap↑ + Legacy weight↑ | 全部；validator 也影响矿力 | 🆕 compound daemon |
+| 声誉超过 70 | repBonus +15%（legacy）+ 贡献奖励额外加成 | 全部 agents | 🔄 自然增长 |
+| 声誉超过 30 | 贡献奖励资格解锁（rep≥20 门槛后） | 全部 agents | 🔄 早期目标 |

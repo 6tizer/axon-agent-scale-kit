@@ -141,6 +141,7 @@ cp configs/runtime/local_env.template.md configs/runtime/local_env.md
 | Service | Unit File | Status |
 |---------|-----------|--------|
 | Heartbeat Daemon (scale-kit) | `axon-heartbeat-daemon.service` | active |
+| Compound Daemon (auto-reinvest) | `axon-compound-daemon.service` | active (deployed 2026-04-04) |
 | QQClaw Validator (migrated) | `axon-agent-qqclaw.service` | disabled (migrated 2026-03-27) |
 
 > `qqclaw-validator` agent 已完成迁徙，由 `axon-heartbeat-daemon.service` 统一维护心跳。
@@ -154,10 +155,15 @@ cp configs/runtime/local_env.template.md configs/runtime/local_env.md
 axon-agent-scale-kit/
 ├── scripts/
 │   ├── axonctl.py              # Primary CLI entry point (heartbeat, challenge, lifecycle…)
+│   ├── compound.py             # Auto-compound daemon (balance → ROI → addStake TX)
+│   ├── systemd/
+│   │   ├── axon-heartbeat-daemon.service
+│   │   └── axon-compound-daemon.service  # Systemd unit for compound daemon
 │   └── release_deploy_verify.sh # One-command push → deploy → restart → verify
 ├── configs/
 │   ├── network.yaml            # Chain constants, RPC, AI Challenge settings
 │   ├── agents.yaml             # Agent definitions
+│   ├── compound.yaml           # Auto-compound daemon parameters
 │   └── runtime/                # Private runtime overrides (gitignored)
 │       ├── hosts.runtime.yaml  # Server host mapping
 │       ├── network.runtime.yaml
@@ -195,6 +201,12 @@ python scripts/axonctl.py registration-audit --network configs/network.yaml --ag
 # Release
 scripts/release_deploy_verify.sh --dry-run --allow-dirty --skip-tests   # rehearsal
 scripts/release_deploy_verify.sh                                           # real release
+
+# Auto-Compound
+python3 scripts/compound.py status --state state/deploy_state.json --network configs/network.yaml --agents configs/agents.yaml
+python3 scripts/compound.py run    --state state/deploy_state.json --network configs/network.yaml --agents configs/agents.yaml --config configs/compound.yaml --dry-run
+python3 scripts/compound.py roi    --stake <current> --add <amount> --rep <rep> --validator
+python3 scripts/compound.py predict-rep --l1 <l1_score> --epochs 30
 ```
 
 ---
