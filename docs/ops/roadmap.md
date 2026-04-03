@@ -32,42 +32,33 @@
 
 ## 二、待办事项（按优先级）
 
-### 🔴 P0 — 等待中（被动）
+### ✅ P0 — 已完成
 
-**节点同步完成**
+**节点同步完成**（2026-04-03）
 
-- 背景：v1.1.0 升级（block 259051）导致旧节点崩溃，已升级二进制并从高度 0 重新同步
-- 目标高度：~267,000+
-- 进度：2026-04-03 约 02:30 开始，预计 03:00-05:00 完成
-- 验证命令：
+- 已完成同步至 height 281096+，`catching_up: False`
+- 验证者已 unjail，恢复 BOND_STATUS_BONDED，正在签块
+
+### ✅ P1 — 已完成（部分）
+
+**验证者恢复正常运行**
+
+- unjail TX 已发送并确认（txhash: DFF8B8F9F3522192603A31395E02FF25D393D97954C9BCB95DCA71C11895AA84）
+- 当前节点用 `start_sync_node.sh` 配置启动，资源占用可接受（磁盘 30%，内存 5.5/7.5GB）
+- **可选**：未来如需降低内存/磁盘，可切换为 `start_validator_node.sh`（pruning=everything），但需要重启节点。当前暂不需要。
+
+### 🟡 P1.5 — 待完成（最高优先级）
+
+**部署 PR #16（challenge validator gate fix）**
+
+- 当前 challenge daemon 仍会对 agent-001~009 尝试提交 challenge TX（失败返回 code=1120）
+- PR #16 已创建（等待 6tizer merge）：https://github.com/6tizer/axon-agent-scale-kit/pull/16
+- Merge 后执行：
   ```bash
-  curl -s http://localhost:26657/status | python3 -c 'import sys,json; d=json.load(sys.stdin); si=d["result"]["sync_info"]; print("Height:", si["latest_block_height"], "catching_up:", si["catching_up"])'
+  bash scripts/release_deploy_verify.sh --dry-run --repo 6tizer/axon-agent-scale-kit --commit <merged_commit_hash>
+  # 确认无误后去掉 --dry-run 运行
+  # 最后：sudo systemctl restart axon-challenge-daemon.service
   ```
-- 完成标志：`catching_up: False`，之后可在 [axonrep.xyz](https://axonrep.xyz) 验证者排行看到签名状态变绿
-
-### 🟠 P1 — 节点同步完成后立刻做
-
-**切换为 `start_validator_node.sh` 配置（同台服务器）**
-
-- 理由：当前全节点配置（`pruning=custom`，保留历史数据，全开 API）比验证者配置重得多，磁盘和内存消耗更高
-- 效果：`pruning=everything`，关闭外部 API/gRPC/JSON-RPC，磁盘占用大幅减少（预计从 20%+ 降至 <10%）
-- **注意**：操作时必须先彻底停止现有节点，再用新脚本启动，防止数据目录冲突
-- 操作步骤：
-  ```bash
-  # 1. 停止现有节点
-  bash /opt/axon-node/start_sync_node.sh stop
-
-  # 2. 确认进程已死
-  ps aux | grep axond | grep -v grep | grep -v bash
-
-  # 3. 用 validator 脚本启动（不需要 init，密钥已存在）
-  KEYRING_PASSWORD_FILE=/opt/axon-node/keyring.pass \
-    nohup bash /opt/axon-node/start_validator_node.sh start > /tmp/axond_validator.log 2>&1 &
-
-  # 4. 验证
-  tail -f /tmp/axond_validator.log
-  ```
-- **双签风险提醒**：绝对不能同时运行两个持有相同私钥的 axond 进程，否则触发双签 → 罚没 5% 质押（430 AXON），永久关押
 
 ### 🟡 P2 — 可并行进行（不依赖节点同步）
 
@@ -159,7 +150,9 @@
 
 ---
 
-## 四、今日操作记录（2026-04-03）
+## 四、操作记录
+
+### 2026-04-03 凌晨（节点升级 + daemon 修复）
 
 | 时间 | 操作 | 结果 |
 |------|------|------|
@@ -171,6 +164,19 @@
 | 同期 | 内存：6.4GB → ~2GB（iavl-cache 调低 + 旧进程清理） | ✅ |
 | 节点升级前 | PR #12（Challenge daemon 5项 bug fix）已 merge | ✅ |
 | 节点升级前 | PR #13（补全 109/110 challenge 答案）已 merge | ✅ |
+
+### 2026-04-03（节点同步完成 + 验证者恢复）
+
+| 时间 | 操作 | 结果 |
+|------|------|------|
+| 节点同步完成 | `catching_up: False`，height 281096 | ✅ |
+| 同期 | QQClaw-Validator 状态：jailed=True，BOND_STATUS_UNBONDING | 需unjail |
+| 同期 | 发送 unjail TX（txhash: DFF8B8F9...）| ✅ |
+| 同期 | 验证者恢复：BOND_STATUS_BONDED，jailed=False，tokens 8591.4 AXON | ✅ |
+| 同期 | 验证者在活跃 validator set，voting power 8591，正在签块 | ✅ |
+| 同期 | PR #14（challenge_batch 并发改造）已 merge | ✅ |
+| 同期 | PR #15（axond --node + --fees fix）已 merge | ✅ |
+| 同期 | PR #16（challenge validator gate fix）已创建，待 6tizer review | 🔄 |
 
 ---
 
