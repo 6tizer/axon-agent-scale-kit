@@ -1,0 +1,44 @@
+[Unit]
+Description=Axon Dashboard FastAPI Backend
+Documentation=https://github.com/tizerluo/axon-agent-scale-kit
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/axon-agent-scale/web/backend
+
+# Python from project venv if present, otherwise system python3
+ExecStart=/bin/bash -c '\
+  if [ -f /home/ubuntu/axon-agent-scale/web/.venv/bin/python ]; then \
+    PYTHON=/home/ubuntu/axon-agent-scale/web/.venv/bin/python; \
+  else \
+    PYTHON=python3; \
+  fi; \
+  exec $PYTHON -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1'
+
+# ── Required: set your API token here ──────────────────────────────────────────
+# Replace <your-token> with a strong random string, e.g.:
+#   openssl rand -hex 32
+Environment=AXON_API_TOKEN=<your-token-here>
+
+# ── Required in production: restrict CORS to your Cloudflare Tunnel domain ─────
+# Replace the example URL with your actual tunnel domain.
+# Multiple origins: comma-separated, no spaces.
+Environment=AXON_CORS_ORIGINS=https://axon-dashboard.your-tunnel-domain.com
+
+# Optional overrides (defaults read from configs/network.yaml)
+# Environment=AXON_REST_URL=https://mainnet-api.axonchain.ai
+
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=axon-dashboard
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

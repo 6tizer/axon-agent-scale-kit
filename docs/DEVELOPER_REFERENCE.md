@@ -111,20 +111,30 @@ Key rule: **never push directly to `main`; all changes go through PR.**
 
 ### SSH Access to Production Server
 
+各机器的 SSH 密钥路径不同，**不写入此共享文档**。  
+每台机器请创建并维护 `configs/runtime/local_env.md`（gitignored）：
+
+```bash
+cp configs/runtime/local_env.template.md configs/runtime/local_env.md
+# 填入本机 SSH 密钥路径后保存
+```
+
+服务器固定信息（所有机器相同）：
+
 | Item | Value |
 |------|-------|
 | Host | `ubuntu@43.165.195.71` (jakarta-node) |
-| SSH Key | `/Users/tizerluo/Downloads/QQClaw.pem` |
-| Connect | `ssh -i /Users/tizerluo/Downloads/QQClaw.pem ubuntu@43.165.195.71` |
+| User | `ubuntu` |
+| Connect template | `ssh -i "<ssh_key_from_local_env.md>" ubuntu@43.165.195.71` |
 
 ### Project Paths
 
 | Environment | Path |
 |-------------|------|
-| **Local repo root** | `/Users/tizerluo/Cursor2026/AXON/axon-agent-scale-kit` |
+| **Local repo root** | 见本机 `configs/runtime/local_env.md` |
 | **Server workdir** | `/home/ubuntu/axon-agent-scale` |
 | **Server state file** | `/home/ubuntu/axon-agent-scale/state/deploy_state.json` |
-| **QQClaw daemon** | `/opt/axon-node/scripts/agent_daemon.py` |
+| **QQClaw daemon** | `/opt/axon-node/scripts/agent_daemon.py` (archived, no longer active) |
 
 ### Server Services
 

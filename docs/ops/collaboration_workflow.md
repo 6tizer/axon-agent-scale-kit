@@ -9,9 +9,25 @@
 | GitHub | 协作中枢，保护 main，托管 PR | — |
 | Server | 最终运行环境，只跑 main 分支 | 生产服务器 |
 
+## 操作分层（三层模型）
+
+所有对代码或服务器的操作，按影响范围分为三层，每层有不同的合法路径：
+
+| 层级 | 操作类型 | 路径 | 适用场景 |
+|------|---------|------|---------|
+| **只读层** | 查看日志、状态、`deploy_state.json` | 直接 SSH，不改任何文件 | 问题排查、链上状态核查 |
+| **配置层** | 修改 `configs/runtime/*.yaml`（gitignored） | 直接 SCP 到服务器，不走 GitHub | 调整 RPC URL、keyring 路径等机器特定配置 |
+| **代码层** | 修改 `scripts/`、`configs/`（非 runtime）、文档 | 必须走 GitHub PR → merge → server git pull | 所有逻辑变更 |
+
+> **配置层说明**：`configs/runtime/*.yaml` 本身在 `.gitignore` 中，不受版本控制管理。  
+> 直接 SCP 是合法且预期的操作，不违反下方"只跑 main 分支"红线——该红线管的是**代码**，不是 runtime configs。
+
+---
+
 ## 红线规则
 
-- **Server 永远只跑 main 分支**，不直接跑非 main 代码，不在服务器上做临时开发。
+- **Server 代码永远只跑 main 分支**，不直接跑非 main 代码，不在服务器上做临时开发。
+- **`configs/runtime/` 是例外**：这些文件 gitignored，各机器/服务器维护自己的版本，可直接 SCP，无需走 GitHub。
 - **协作者不能直接推 origin**，所有代码必须通过 PR 合入。
 - **禁止跳过 PR 直接 merge** 到 main（GitHub 分支保护规则强制执行）。
 
@@ -319,3 +335,58 @@ git branch -a
       │  9. 验收通过          │  10. 同步最新 main       │                    │
       │<─────────────────────│────────────────────────>│                    │
 ```
+
+---
+
+## 排障协议（Debug Protocol）
+
+### 排障前：必须先核查代码同步状态
+
+**本地与服务器跑的不是同一份代码**是排查 bug 时最常见的隐性陷阱。在任何排查之前，先做一步：
+
+```bash
+# Step 1：本地
+git log -1 --format='%H %s'
+
+# Step 2：SSH 进服务器
+ssh -i "<ssh_key_from_local_env.md>" ubuntu@43.165.195.71
+cd /home/ubuntu/axon-agent-scale
+git log -1 --format='%H %s'
+```
+
+| 结果 | 行动 |
+|------|------|
+| hash 一致 | 继续排查，本地代码即为服务器代码 |
+| hash 不一致 | 先在服务器 `git pull origin main` + 重启服务，再排查 |
+
+### 按 bug 类型选择排查位置
+
+| Bug 类型 | 排查位置 | 原因 |
+|---------|---------|------|
+| 逻辑错误、计算错误 | **本地 IDE** | 工具最全，代码同步后本地即是权威 |
+| 运行时状态异常（agent 心跳/challenge 失败） | **服务器 `state/deploy_state.json`** | state 文件 gitignored，只存在于服务器 |
+| 服务崩溃、启动失败 | **服务器 `journalctl`** | `journalctl -u axon-heartbeat-daemon -n 100 --no-pager` |
+| 环境/依赖/网络问题 | **服务器直连** | 本地环境无法完全复现 |
+| `axond` keyring / Cosmos 交易失败 | **服务器直连** | keyring 数据只在服务器上 |
+
+### 常用服务器排查命令（只读）
+
+```bash
+# 服务状态
+sudo systemctl status axon-heartbeat-daemon.service
+
+# 最近 100 行日志
+journalctl -u axon-heartbeat-daemon -n 100 --no-pager
+
+# 查看 state（只读）
+cat /home/ubuntu/axon-agent-scale/state/deploy_state.json | python3 -m json.tool | head -80
+
+# 当前代码版本
+git -C /home/ubuntu/axon-agent-scale log -1 --format='%H %s %ci'
+
+# Docker 容器状态
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.RunningFor}}"
+```
+
+> **只读原则**：排查过程中不修改服务器上的代码文件。配置调整走配置层（SCP），逻辑修复走代码层（GitHub PR）。
+
