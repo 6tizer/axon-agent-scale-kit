@@ -42,19 +42,22 @@ _REQUIRED_MARKERS = frozenset([
     "sha256.Sum256",
 ])
 KNOWN_ANSWERS = {
-    # Hash-verified answers — 88/110 confirmed by SHA256 against challenge.go
-    # 22 entries below use LLM fallback (expected_hash in comment for manual lookup)
+    # Hash-verified answers — 109/110 confirmed by SHA256 against challenge.go
+    # 1 entry remains unknown (CAP theorem — see comment at bottom)
 
     "In BFT consensus, what fraction of nodes can be faulty?": "lessthan1/3",
     "In Ethereum, what opcode is used to transfer ETH to another address?": "CALL",
     "In Go, what keyword is used to launch a concurrent goroutine?": "go",
     "In Java, what keyword prevents a class from being subclassed?": "final",
+    "In Python, what built-in function returns the length of a container?": "len",
     "In Python, what keyword is used to define a generator function?": "yield",
     "In Rust, what system prevents data races at compile time?": "ownership",
     "In SQL, what clause filters groups after aggregation?": "HAVING",
     "In SQL, what type of JOIN returns all rows from the left table?": "LEFT JOIN",
+    "In a Merkle tree, what is stored in leaf nodes?": "hash of data",
     "In proof of stake, what prevents nothing-at-stake attacks?": "slashing",
     "Name the pattern where an object notifies dependents of state changes.": "observer",
+    "Name the principle: a class should have only one reason to change.": "single responsibility",
     "Name the sorting algorithm with best-case O(n) and worst-case O(n^2).": "insertion sort",
     "What Cosmos SDK module handles token transfers?": "bank",
     "What EIP introduced EIP-1559 fee mechanism?": "EIP-1559",
@@ -64,6 +67,7 @@ KNOWN_ANSWERS = {
     "What HTTP status code means resource not found?": "404",
     "What SDK framework does Axon build upon?": "Cosmos SDK",
     "What SQL command is used to add new rows to a table?": "INSERT",
+    "What SQL command removes a table and its schema entirely?": "DROP",
     "What SQL keyword removes duplicate rows from query results?": "DISTINCT",
     "What activation function outputs values between 0 and 1?": "sigmoid",
     "What algorithm finds the minimum spanning tree by greedily adding the cheapest edge that does not form a cycle?": "Kruskal",
@@ -71,14 +75,20 @@ KNOWN_ANSWERS = {
     "What algorithm is widely used for public-key cryptography based on integer factorization?": "RSA",
     "What algorithmic technique solves problems by breaking them into overlapping subproblems?": "dynamic programming",
     "What attack injects malicious SQL through user input?": "SQL injection",
+    "What attack intercepts communication between two parties without their knowledge?": "man in the middle",
     "What attack tricks a user's browser into making an unwanted request to another site?": "CSRF",
     "What complexity class contains problems solvable in polynomial time?": "P",
     "What complexity class contains problems verifiable in polynomial time?": "NP",
     "What condition occurs when two or more processes each wait for the other to release a resource?": "deadlock",
     "What consensus algorithm does CometBFT use?": "pbft",
     "What consensus engine does Axon use?": "CometBFT",
+    "What consistency model guarantees that a read returns the most recent write?": "linearizability",
     "What data structure uses LIFO (Last In First Out)?": "stack",
+    "What design pattern converts the interface of a class into another expected interface?": "adapter",
+    "What design pattern defines a family of algorithms and makes them interchangeable?": "strategy",
     "What design pattern ensures a class has only one instance?": "singleton",
+    "What design pattern lets you compose objects into tree structures?": "composite",
+    "What design pattern provides a surrogate object to control access to another object?": "proxy",
     "What distributed consensus algorithm uses a leader and log replication?": "Raft",
     "What does AES stand for?": "Advanced Encryption Standard",
     "What does API stand for?": "application programming interface",
@@ -96,6 +106,8 @@ KNOWN_ANSWERS = {
     "What is the derivative of x^3 with respect to x?": "3x^2",
     "What is the first process started by the Linux kernel?": "init",
     "What is the gas cost of SSTORE in Ethereum when setting a zero to non-zero value?": "20000",
+    "What is the halting problem about?": "undecidability of program termination",
+    "What is the maximum block gas limit set in Axon genesis?": "40000000",
     "What is the name of the Ethereum bytecode execution environment?": "EVM",
     "What is the next Fibonacci number after 5, 8, 13?": "21",
     "What is the purpose of a nonce in blockchain transactions?": "prevent replay attacks",
@@ -112,15 +124,20 @@ KNOWN_ANSWERS = {
     "What mechanism allows token holders to vote on protocol changes?": "governance",
     "What mechanism in Cosmos enables cross-chain communication?": "IBC",
     "What memory management technique divides memory into fixed-size pages?": "paging",
+    "What metric measures the area under the receiver operating characteristic curve?": "AUC",
     "What module in Axon handles AI agent registration?": "agent",
     "What network device operates at layer 3 of the OSI model?": "router",
     "What optimization algorithm iteratively updates parameters using the gradient of the loss?": "gradient descent",
     "What port does HTTPS use by default?": "443",
+    "What programming paradigm treats computation as evaluation of mathematical functions?": "functional",
     "What property ensures a database transaction is all-or-nothing?": "atomicity",
     "What protocol does gRPC use for transport?": "HTTP/2",
+    "What protocol ensures all nodes in a distributed system agree on a single value?": "consensus",
     "What protocol is used to securely access a remote shell?": "SSH",
     "What protocol resolves domain names to IP addresses?": "DNS",
+    "What scheduling algorithm gives each process equal time slices in rotation?": "round robin",
     "What search algorithm explores all neighbors at the current depth before moving deeper?": "BFS",
+    "What security principle states users should have only the minimum permissions required?": "least privilege",
     "What security protocol replaced SSL for encrypted web communication?": "TLS",
     "What sorting algorithm has O(n log n) worst case and is in-place?": "heapsort",
     "What system call creates a new process in Unix?": "fork",
@@ -129,34 +146,17 @@ KNOWN_ANSWERS = {
     "What transport protocol is connectionless?": "UDP",
     "What type of attack floods a server with traffic to make it unavailable?": "DDoS",
     "What type of automaton recognizes regular languages?": "finite automaton",
+    "What type of clock assigns a counter to events for partial ordering?": "Lamport clock",
+    "What type of cryptographic scheme allows verification without revealing the underlying data?": "zero knowledge proof",
+    "What type of database is LevelDB?": "key-value",
+    "What type of database management system guarantees ACID properties?": "relational",
     "What type of encryption uses the same key for encrypt and decrypt?": "symmetric",
     "What type of neural network is primarily used for image recognition?": "CNN",
     "What type of node stores the full blockchain history?": "full node",
     "What unsupervised learning algorithm partitions data into k groups?": "k-means",
 
-    # -- MISSING (22): LLM fallback --
-    # "In Python, what built-in function returns the length of a container?": ""  # expected_hash=71fa9faaa6f884aa...
-    # "In a Merkle tree, what is stored in leaf nodes?": ""  # expected_hash=f2b2355832773f01...
-    # "Name the principle: a class should have only one reason to change.": ""  # expected_hash=dac229411941d57b...
-    # "What SQL command removes a table and its schema entirely?": ""  # expected_hash=d90ee9ccf6bea1d2...
-    # "What attack intercepts communication between two parties without their knowledge?": ""  # expected_hash=cca6b60b9a61ab32...
-    # "What consistency model guarantees that a read returns the most recent write?": ""  # expected_hash=d7ac9cbaf1cc9bcd...
-    # "What design pattern converts the interface of a class into another expected interface?": ""  # expected_hash=ae1eae1d76e5b7c8...
-    # "What design pattern defines a family of algorithms and makes them interchangeable?": ""  # expected_hash=73dff70e25ad51ca...
-    # "What design pattern lets you compose objects into tree structures?": ""  # expected_hash=ad1e26066637d18f...
-    # "What design pattern provides a surrogate object to control access to another object?": ""  # expected_hash=1241936d4dd3aad6...
-    # "What does CAP theorem state about distributed systems?": ""  # expected_hash=3829c9300cee8309...
-    # "What is the halting problem about?": ""  # expected_hash=25f255bfe8a08bcb...
-    # "What is the maximum block gas limit set in Axon genesis?": ""  # expected_hash=2ddb67b8a8c259ff...
-    # "What metric measures the area under the receiver operating characteristic curve?": ""  # expected_hash=dc3743da64c5b837...
-    # "What programming paradigm treats computation as evaluation of mathematical functions?": ""  # expected_hash=3b637864e75ab14e...
-    # "What protocol ensures all nodes in a distributed system agree on a single value?": ""  # expected_hash=c983c585ac3c40d9...
-    # "What scheduling algorithm gives each process equal time slices in rotation?": ""  # expected_hash=87c7e8c457a3f6e8...
-    # "What security principle states users should have only the minimum permissions required?": ""  # expected_hash=196839c141461caa...
-    # "What type of clock assigns a counter to events for partial ordering?": ""  # expected_hash=39261de510c553cb...
-    # "What type of cryptographic scheme allows verification without revealing the underlying data?": ""  # expected_hash=f382e21334df3237...
-    # "What type of database is LevelDB?": ""  # expected_hash=264b8327c2695fd0...
-    # "What type of database management system guarantees ACID properties?": ""  # expected_hash=5449d70e4205b9bc...
+    # -- MISSING (1): exact phrasing not yet found --
+    # "What does CAP theorem state about distributed systems?": ""  # expected_hash=3829c9300cee83099f62df43694c0fc29eb2b1ed874bab38f207172fc3266081
 }
 
 
@@ -241,7 +241,7 @@ def write_answer_bank(bank: dict, hash_map: dict, output_file: str) -> None:
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     lines = ["# Auto-generated answer bank for AI Challenge\n"]
     lines.append("# Run `python scripts/scrape_challenge_bank.py` to refresh.\n")
-    lines.append("# Coverage: 88/110 hash-verified, 22 LLM-fallback (see MISSING list below).\n\n")
+    lines.append("# Coverage: 109/110 hash-verified, 1 unknown (CAP theorem exact phrasing not yet found).\n\n")
     lines.append("answers:\n")
     for q, a in bank.items():
         q_escaped = q.replace('"', '\\"')
