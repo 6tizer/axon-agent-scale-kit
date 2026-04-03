@@ -23,4 +23,12 @@ configs/recovery/*.yaml
 !configs/recovery/*.template.yaml
 configs/runtime/*.yaml
 !configs/runtime/*.template.yaml
+configs/runtime/local_env.md
 .trae/
+
+# Web Dashboard
+web/frontend/node_modules/
+web/frontend/.next/
+web/frontend/out/
+web/frontend/.env.local
+web/.venv/

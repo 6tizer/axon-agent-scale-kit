@@ -1370,7 +1370,7 @@ def challenge_run_once(state_file: str, network: str, agent: str) -> int:
         reveal_tx_hash = last_reveal if already_revealed else ""
 
         if not already_committed and current_block <= deadline_block:
-            ok, tx_hash_or_err = client.submit_commit(agent, epoch, commit_hash)
+            ok, tx_hash_or_err = client.submit_commit(agent, epoch, answer)
             if ok:
                 commit_ok = True
                 commit_tx_hash = tx_hash_or_err

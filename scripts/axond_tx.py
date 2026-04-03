@@ -273,7 +273,7 @@ def query_tx_status(tx_hash: str, rest_url: str = COSMOS_BROADCAST_URL) -> dict:
 
 # ─── 交易发送 ───────────────────────────────────────────────────────────────
 
-def build_submit_tx(agent_name: str, epoch: int, commit_hash: str,
+def build_submit_tx(agent_name: str, epoch: int, answer: str,
                     chain_id: str, keyring_dir: str,
                     broadcast_mode: str = "sync",
                     keyring_backend: str = "test",
@@ -283,7 +283,9 @@ def build_submit_tx(agent_name: str, epoch: int, commit_hash: str,
     构建 axond submit-challenge 命令参数。
 
     axond tx agent submit-challenge [epoch] [answer]
-    answer = commit_hash (sha256 十六进制)
+    answer = 原始答案文本（如 "404"）。
+    CLI 内部会计算 SHA256(msg.Sender + ":" + answer) 作为 CommitHash 存入链上。
+    注意：不要传预计算好的 hash，否则链上存的是二次 hash，reveal 永远失败。
     --from 指定签名者（axond keyring 中的密钥名）
 
     node_url: CometBFT RPC 端点，若不传则 axond 默认连 localhost:26657。
@@ -295,7 +297,7 @@ def build_submit_tx(agent_name: str, epoch: int, commit_hash: str,
     cmd = [
         "tx", "agent", "submit-challenge",
         str(epoch),
-        commit_hash,
+        answer,
         "--from", agent_name,
         "--chain-id", chain_id,
         "--keyring-dir", str(Path(keyring_dir).expanduser()),
@@ -458,7 +460,7 @@ class AxondClient:
 
     使用方式：
         client = AxondClient(network_cfg, state_file)
-        ok, tx_hash = client.submit_commit(agent_name, epoch, commit_hash)
+        ok, tx_hash = client.submit_commit(agent_name, epoch, answer)
         ok2, tx_hash2 = client.submit_reveal(agent_name, epoch, reveal_data)
     """
 
@@ -567,11 +569,14 @@ class AxondClient:
         self,
         agent_name: str,
         epoch: int,
-        commit_hash: str,
+        answer: str,
         dry_run: bool = False,
     ) -> tuple[bool, str]:
         """
         发送 MsgSubmitAIChallengeResponse。
+
+        answer 为原始答案文本（如 "404"）。CLI 内部计算 SHA256(sender:answer)
+        作为 CommitHash，无需预计算后再传入。
 
         返回 (success, tx_hash_or_error)。
         """
@@ -583,7 +588,7 @@ class AxondClient:
         args = build_submit_tx(
             agent_name=agent_name,
             epoch=epoch,
-            commit_hash=commit_hash,
+            answer=answer,
             chain_id=self.chain_id,
             keyring_dir=self.keyring_dir,
             broadcast_mode=self.broadcast_mode,
