@@ -1,6 +1,6 @@
 # Axon 运维路线图 & 架构备忘
 
-> 最后更新：2026-04-03
+> 最后更新：2026-04-03（PR #17 部署后）
 > 记录本次会话中确认的架构事实、待办事项和决策依据，供后续 Agent 或操作者参考。
 
 ---
@@ -47,20 +47,16 @@
 - 当前节点用 `start_sync_node.sh` 配置启动，资源占用可接受（磁盘 30%，内存 5.5/7.5GB）
 - **可选**：未来如需降低内存/磁盘，可切换为 `start_validator_node.sh`（pruning=everything），但需要重启节点。当前暂不需要。
 
-### 🟡 P1.5 — 待完成（最高优先级）
+### ✅ P1.5 — 已完成
 
-**部署 PR #16（challenge validator gate fix）**
+**部署 PR #16 + PR #17（challenge validator gate 全套修复）**
 
-- 当前 challenge daemon 仍会对 agent-001~009 尝试提交 challenge TX（失败返回 code=1120）
-- PR #16 已创建（等待 6tizer merge）：https://github.com/6tizer/axon-agent-scale-kit/pull/16
-- Merge 后执行：
-  ```bash
-  bash scripts/release_deploy_verify.sh --dry-run --repo 6tizer/axon-agent-scale-kit --commit <merged_commit_hash>
-  # 确认无误后去掉 --dry-run 运行
-  # 最后：sudo systemctl restart axon-challenge-daemon.service
-  ```
+- PR #16（`challenge_batch` 白名单过滤）已 merge 并部署，commit `1909113`
+- PR #17（`challenge_gate_check` `validator_active` 字段 bug 修复）已 merge 并部署，commit `c9ab34d`
+- challenge daemon 已重启（PID 3070131），`validator_active: true` 已确认
+- 9 个非 validator agents 已被正确跳过，`qqclaw-validator` 是唯一挑战候选人
 
-### 🟡 P2 — 可并行进行（不依赖节点同步）
+### 🟡 P2 — 可在稳定运行一段时间后进行
 
 **`challenge_batch` 串行改并发**
 
@@ -176,7 +172,10 @@
 | 同期 | 验证者在活跃 validator set，voting power 8591，正在签块 | ✅ |
 | 同期 | PR #14（challenge_batch 并发改造）已 merge | ✅ |
 | 同期 | PR #15（axond --node + --fees fix）已 merge | ✅ |
-| 同期 | PR #16（challenge validator gate fix）已创建，待 6tizer review | 🔄 |
+| 同期 | PR #16（challenge validator gate fix）已 merge 并部署 commit `1909113` | ✅ |
+| 同期 | PR #17（challenge_gate_check validator_active bug fix）已 merge 并部署 commit `c9ab34d` | ✅ |
+| 同期 | challenge daemon 重启，`validator_active: true` 确认，白名单过滤生效 | ✅ |
+| 待验证 | 等下一个 epoch 挑战窗口，观察 qqclaw-validator commit + reveal 成功 | 🔄 |
 
 ---
 
