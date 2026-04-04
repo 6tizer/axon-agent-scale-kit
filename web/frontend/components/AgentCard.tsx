@@ -101,13 +101,15 @@ export function AgentCard({ agent, className }: AgentCardProps) {
             {fmt(agent.balance_axon)}
           </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <TrendingUp className="h-3.5 w-3.5 shrink-0" />
-          <span className="text-[10px] text-muted-foreground">质押</span>
-          <span className="font-medium text-foreground">
-            {fmt(agent.stake_axon)}
-          </span>
-        </div>
+        {agent.stake_axon > 0 && (
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="h-3.5 w-3.5 shrink-0" />
+            <span className="text-[10px] text-muted-foreground">质押</span>
+            <span className="font-medium text-foreground">
+              {fmt(agent.stake_axon)}
+            </span>
+          </div>
+        )}
         {agent.last_heartbeat_block && (
           <div className="flex items-center gap-1.5">
             <Activity className="h-3.5 w-3.5 shrink-0" />
