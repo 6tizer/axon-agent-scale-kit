@@ -80,6 +80,7 @@ export type Agent = {
   wallet_address: string | null;
   bech32_address: string | null;
   balance_axon: number;
+  stake_axon: number;
   reputation: number | null;
   last_heartbeat_block: number | null;
   heartbeat_at: number | string | null;

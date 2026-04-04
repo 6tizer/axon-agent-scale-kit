@@ -38,21 +38,33 @@ async def list_agents() -> dict[str, Any]:
             if bech32:
                 bech32_map[name] = bech32
 
-    # Fetch balances and per-agent on-chain data concurrently.
+    # Fetch balances, per-agent on-chain data, and stake concurrently.
     # Use per-agent /axon/agent/v1/agent/{addr} endpoint to avoid the 200-result
     # cap on the list endpoint.
+    # Stake is fetched via eth_call to the Registry precompile (EVM RPC).
     onchain_tasks = {name: cosmos_api.get_agent_onchain(bech32) for name, bech32 in bech32_map.items()}
-    balances_result, *onchain_results = await asyncio.gather(
+    stake_tasks = {name: cosmos_api.get_stake_axon(evm) for name, evm in evm_addresses.items()}
+    balances_result, *rest = await asyncio.gather(
         cosmos_api.get_balances_batch(bech32_map),
         *onchain_tasks.values(),
+        *stake_tasks.values(),
     )
     balances = balances_result
+
+    # Split rest: first len(onchain_tasks) items are on-chain agent data, remainder are stakes
+    n = len(onchain_tasks)
+    onchain_results = rest[:n]
+    stake_results = rest[n:]
 
     # Map our agents' on-chain data by agent name
     onchain_map: dict[str, dict] = {}
     for name, agent_data in zip(onchain_tasks.keys(), onchain_results):
         if agent_data:
             onchain_map[name] = agent_data
+
+    stakes: dict[str, float] = {}
+    for name, val in zip(stake_tasks.keys(), stake_results):
+        stakes[name] = float(val) if isinstance(val, (int, float)) else 0.0
 
     items = []
     for agent_meta in agents_cfg:
@@ -89,6 +101,7 @@ async def list_agents() -> dict[str, Any]:
             "wallet_address": state.get("wallet_address"),
             "bech32_address": bech32_map.get(name),
             "balance_axon": balances.get(name, 0.0),
+            "stake_axon": stakes.get(name, 0.0),
             "reputation": reputation,
             "last_heartbeat_block": state.get("last_heartbeat_block"),
             "heartbeat_at": state.get("heartbeat_at"),

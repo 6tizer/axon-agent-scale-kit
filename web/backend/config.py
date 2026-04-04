@@ -112,6 +112,10 @@ def api_token() -> str:
 VALIDATOR_VALOPER = "axonvaloper14xxu9g0fvnkclwt98yz9cldtwhpam560sgc8s0"
 VALIDATOR_AGENT_NAME = "qqclaw-validator"
 
+def evm_rpc_url() -> str:
+    return get_network_cfg().get("rpc_url", "https://mainnet-rpc.axonchain.ai/").rstrip("/")
+
+
 # Daemon service names
 DAEMON_HEARTBEAT = "axon-heartbeat-daemon.service"
 DAEMON_CHALLENGE = "axon-challenge-daemon.service"
