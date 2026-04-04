@@ -77,6 +77,60 @@ async def _get(path: str, cache: bool = False) -> dict[str, Any] | None:
         return None
 
 
+# ── EVM Registry precompile (stake queries) ────────────────────────────────────
+# The stake data lives in the EVM precompile, not the Cosmos module, so it
+# cannot be fetched from the Cosmos REST API. We use a raw eth_call POST
+# to the EVM JSON-RPC endpoint — no web3 dependency needed.
+_REGISTRY = "0x0000000000000000000000000000000000000801"
+# keccak256("getStakeInfo(address)")[:4] — pre-computed, ABI is stable.
+# Verification: keccak256(b"getStakeInfo(address)").hex()[:8] == "c3453153"
+_GET_STAKE_SELECTOR = "c3453153"
+
+
+async def _eth_call(to: str, data: str) -> str | None:
+    """POST an eth_call JSON-RPC request; returns hex result string or None on error.
+
+    Results are cached for _CACHE_TTL seconds so repeated page refreshes within
+    the TTL window skip the network entirely.
+    """
+    cache_key = f"eth_call:{to}:{data}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "eth_call",
+            "params": [{"to": to, "data": f"0x{data}"}, "latest"],
+            "id": 1,
+        }
+        resp = await _get_client().post(cfg.evm_rpc_url(), json=payload)
+        resp.raise_for_status()
+        result = resp.json().get("result")
+        if result and result != "0x":
+            _cache_set(cache_key, result)
+        return result
+    except Exception:
+        return None
+
+
+async def get_stake_axon(evm_address: str) -> float:
+    """Return totalStake in AXON for evm_address via getStakeInfo on the Registry precompile.
+
+    ABI: getStakeInfo(address) → (totalStake uint256, pendingReduce uint256, reduceUnlockHeight uint64)
+    We decode only the first 32-byte word (totalStake) and convert from aaxon (1e18) to AXON.
+    """
+    addr_padded = evm_address.lower().removeprefix("0x").zfill(64)
+    calldata = _GET_STAKE_SELECTOR + addr_padded
+    result = await _eth_call(_REGISTRY, calldata)
+    if not result or result == "0x":
+        return 0.0
+    try:
+        return int(result.removeprefix("0x")[:64], 16) / 1e18
+    except Exception:
+        return 0.0
+
+
 # ── Validator ───────────────────────────────────────────────────────────────────
 async def get_validator_status() -> dict[str, Any] | None:
     """
